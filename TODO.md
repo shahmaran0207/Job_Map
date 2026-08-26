@@ -123,6 +123,17 @@
 
 ---
 
+## 6.5 Dependabot PR 검토
+
+Dependabot이 열어둔 PR이 있다. 패치·마이너는 묶여 오지만 아래는 **메이저 업그레이드**이므로 그냥 머지하면 안 된다:
+
+- `typescript` 7.x — 메이저. 타입 검사 통과 확인 필요
+- `@types/node` 26.x
+- `fast-xml-parser` 5.x — 파싱 동작이 바뀔 수 있다. 워크넷 응답 파싱에 직접 영향
+- GitHub Actions: `actions/checkout` v7, `actions/setup-node` v7, `github/codeql-action` v4, `gitleaks/gitleaks-action` v3
+
+각각 머지 후 `npm run typecheck`, `npm run test:ingest`, `npm run keys:check` 로 확인한다.
+
 ## 7. 나중에
 
 - 공통코드 API(`WORKNET_CODE_API_KEY`)로 직종·지역 코드 마스터 적재 → 분류 일관성 확보 (알터너티브 데이터 상품의 전제)
