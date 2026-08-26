@@ -8,6 +8,7 @@
   },
   "scripts": {
     "db:check": "tsx src/scripts/db-check.ts",
+    "keys:check": "tsx src/scripts/check-keys.ts",
     "migrate": "tsx src/scripts/migrate.ts",
     "collect": "tsx src/collectors/run.ts",
     "collect:worknet": "tsx src/collectors/run.ts --source=worknet",
