@@ -123,16 +123,14 @@
 
 ---
 
-## 6.5 Dependabot PR 검토
+## 6.5 Dependabot — 처리 완료, 재발 방지됨
 
-Dependabot이 열어둔 PR이 있다. 패치·마이너는 묶여 오지만 아래는 **메이저 업그레이드**이므로 그냥 머지하면 안 된다:
+2026-08-26: 메이저 업그레이드가 검증 없이 머지되었다 (`typescript` 7.x, `@types/node` 26.x, `fast-xml-parser` 5.x, `dotenv` 17.x, GitHub Actions v7/v4/v3). 사후 검증 결과 전부 정상 — 타입 검사, 파싱 회귀 테스트, 적재 스모크 테스트 통과.
 
-- `typescript` 7.x — 메이저. 타입 검사 통과 확인 필요
-- `@types/node` 26.x
-- `fast-xml-parser` 5.x — 파싱 동작이 바뀔 수 있다. 워크넷 응답 파싱에 직접 영향
-- GitHub Actions: `actions/checkout` v7, `actions/setup-node` v7, `github/codeql-action` v4, `gitleaks/gitleaks-action` v3
+`fast-xml-parser` 5.x는 워크넷 응답 파싱에 직접 영향이 있었으므로 운이 좋았던 것에 가깝다. 재발 방지로 `ci.yml`을 추가했다:
 
-각각 머지 후 `npm run typecheck`, `npm run test:ingest`, `npm run keys:check` 로 확인한다.
+- `npm run test:parse` — 시크릿 없이 도는 파싱 회귀 테스트. **Dependabot PR에서도 그대로 실행되므로 앞으로는 파싱을 깨는 업그레이드가 머지 전에 잡힌다**
+- 앞으로 의존성 PR은 CI 초록불 확인 후 머지한다. DB가 필요한 `test:ingest`는 로컬에서 돌린다
 
 ## 7. 나중에
 

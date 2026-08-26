@@ -1,0 +1,33 @@
+name: ci
+
+# 시크릿이 필요 없는 검증만 여기 둔다. 그래서 Dependabot PR 에서도 그대로 돌아간다.
+# 의존성 업그레이드가 파싱 동작을 조용히 바꾸는 것을 막는 것이 이 워크플로의 존재 이유다.
+# (fast-xml-parser 4.x -> 5.x 같은 메이저 업그레이드가 검증 없이 머지되는 사고 방지)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      # 설치 스크립트를 실행하지 않는다. 의존성 하나가 오염되면 CI 가 유출 경로가 된다.
+      - run: npm ci --ignore-scripts
+
+      - name: 타입 검사
+        run: npm run typecheck
+
+      - name: 응답 파싱 회귀 테스트
+        run: npm run test:parse
