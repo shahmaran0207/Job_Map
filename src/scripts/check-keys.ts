@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { WORKNET_FLAVORS, buildListUrl, endpointOf } from '../collectors/worknet.ts';
 import { closeDb } from '../lib/db.ts';
 import { env } from '../lib/env.ts';
 import { geocode } from '../lib/geocode.ts';
@@ -29,8 +30,18 @@ function describeKey(label: string, value: string | undefined): void {
   console.log(`  ${label}: ${hints.join(', ')}`);
 }
 
+const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false, trimValues: true });
+
+/**
+ * 채용정보 API 를 두 계열 모두 시도한다.
+ *
+ * 개인이 받을 수 있는 키(공공데이터포털)와 기업·기관 키(고용24)가 엔드포인트가
+ * 다르고, 어느 쪽을 받았는지 사용자가 알기 어렵다. 그래서 둘 다 호출해 보고
+ * 동작하는 쪽을 알려준다. 잘못된 조합에서 오는 오류 메시지가 서로 달라
+ * 원인 판별에도 도움이 된다.
+ */
 async function checkWorknet(): Promise<void> {
-  console.log('── 고용24(워크넷) 채용정보 오픈API ──────────');
+  console.log('── 채용정보 오픈API ─────────────────────────');
   let key: string;
   try {
     key = env.worknetKey;
@@ -40,62 +51,83 @@ async function checkWorknet(): Promise<void> {
     return;
   }
   describeKey('WORKNET_API_KEY', key);
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) {
+    console.log('  형태: UUID — 고용24 포털에서 발급된 키로 보입니다');
+  }
+  console.log('');
 
-  const url = new URL('https://openapi.work.go.kr/opi/opi/opia/wantedApi.do');
-  url.searchParams.set('authKey', key);
-  url.searchParams.set('callTp', 'L');
-  url.searchParams.set('returnType', 'XML');
-  url.searchParams.set('startPage', '1');
-  url.searchParams.set('display', '10');
+  let working: string | null = null;
 
+  for (const flavor of WORKNET_FLAVORS) {
+    const ep = endpointOf(flavor);
+    console.log(`[${flavor}] ${ep.host}`);
+    const result = await probe(flavor);
+    if (result === 'ok') working = flavor;
+  }
+
+  console.log('');
+  if (working) {
+    console.log(`✓ 동작하는 계열: ${working}`);
+    if (working !== env.worknetFlavor) {
+      console.log(`  .env 에 WORKNET_API_FLAVOR=${working} 를 추가하세요.`);
+      console.log(`  (현재 설정: ${env.worknetFlavor})`);
+      failures += 1;
+    }
+  } else {
+    console.log('✗ 두 계열 모두 실패했습니다.');
+    console.log('  - "개인회원은 사용할 수 없는" 메시지가 보이면: 고용24 채용정보 API 는');
+    console.log('    기업·기관회원 전용입니다. 공공데이터포털(data.go.kr)의');
+    console.log('    "한국고용정보원_워크넷 채용정보" 를 자동승인으로 신청해 키를 받으세요.');
+    console.log('    단 KOGL 제4유형(비상업적 이용만)이라는 제약이 붙습니다.');
+    console.log('  - "유효하지 않은 인증키" 가 보이면: 키가 해당 API 용이 아니거나');
+    console.log('    활용신청이 승인되지 않은 상태입니다.');
+    failures += 1;
+  }
+}
+
+async function probe(flavor: (typeof WORKNET_FLAVORS)[number]): Promise<'ok' | 'fail'> {
+  const ep = endpointOf(flavor);
   try {
-    const res = await safeFetch(url, {
-      allowHosts: ['openapi.work.go.kr'],
+    const res = await safeFetch(buildListUrl(1, 10, flavor), {
+      allowHosts: [ep.host],
       maxRedirects: 0,
       maxBytes: 4 * 1024 * 1024,
       timeoutMs: 30_000,
     });
 
     if (res.status !== 200) {
-      console.log(`✗ HTTP ${res.status}`);
-      failures += 1;
-      return;
+      console.log(`  ✗ HTTP ${res.status}`);
+      return 'fail';
     }
 
-    const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false, trimValues: true });
     const parsed = stripDangerousKeys(parser.parse(res.text)) as Record<string, any>;
-    const root = parsed.wantedRoot ?? parsed.WantedRoot ?? parsed.response ?? parsed;
+    const root = parsed.wantedRoot ?? parsed.WantedRoot ?? parsed.GO24 ?? parsed.response ?? parsed;
 
-    // 오류 응답은 본문에 메시지로 온다. HTTP 200 이어도 실패일 수 있다.
+    // 오류는 HTTP 200 본문에 메시지로 온다. 상태코드만 봐서는 알 수 없다.
     const errMsg =
       root?.error ?? root?.errorMsg ?? root?.message ?? root?.resultMsg ?? root?.returnAuthMsg;
     const wanted = root?.wanted;
 
     if (!wanted) {
-      console.log('✗ 공고 데이터가 없습니다');
-      if (errMsg) console.log(`  서버 메시지: ${String(errMsg).slice(0, 200)}`);
-      console.log('  응답 앞부분:');
-      console.log('  ' + res.text.replace(/\s+/g, ' ').slice(0, 400));
-      console.log('');
-      console.log('  가장 흔한 원인: 인증키는 발급됐지만 "채용정보" API 개별 활용신청이');
-      console.log('  안 된 상태입니다. openapi.work.go.kr 의 오픈API 목록에서 신청하세요.');
-      failures += 1;
-      return;
+      if (errMsg) console.log(`  ✗ ${String(errMsg).slice(0, 120)}`);
+      else console.log(`  ✗ 공고 없음 — 응답: ${res.text.replace(/\s+/g, ' ').slice(0, 200)}`);
+      return 'fail';
     }
 
     const items = Array.isArray(wanted) ? wanted : [wanted];
-    console.log(`✓ 응답 정상 — ${items.length}건 수신 (전체 ${root?.total ?? '?'}건)`);
+    console.log(`  ✓ ${items.length}건 수신 (전체 ${root?.total ?? '?'}건)`);
 
-    // 필드 매핑 검증용으로 실제 키 목록을 보여준다. 문서와 다른 경우가 많다.
+    // 필드 매핑 교정에 쓸 실제 키 목록. 문서와 다른 경우가 많다.
     const first = items[0] as Record<string, unknown> | undefined;
     if (first) {
-      console.log(`  응답 필드: ${Object.keys(first).join(', ')}`);
-      const addrKeys = Object.keys(first).filter((k) => /addr|region|place|근무/i.test(k));
-      console.log(`  주소 관련 필드: ${addrKeys.length ? addrKeys.join(', ') : '없음 (상세 API 필요)'}`);
+      console.log(`    응답 필드: ${Object.keys(first).join(', ')}`);
+      const addrKeys = Object.keys(first).filter((k) => /addr|region|place|loc/i.test(k));
+      console.log(`    주소 관련: ${addrKeys.length ? addrKeys.join(', ') : '없음 (상세 API 필요)'}`);
     }
+    return 'ok';
   } catch (e) {
-    console.log(`✗ 호출 실패: ${String(e)}`);
-    failures += 1;
+    console.log(`  ✗ 호출 실패: ${String(e).slice(0, 160)}`);
+    return 'fail';
   }
 }
 

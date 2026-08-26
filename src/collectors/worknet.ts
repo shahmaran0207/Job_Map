@@ -4,10 +4,69 @@ import type { Collector, CollectorResult, NormalizedPosting } from './types.ts';
 import { XMLParser } from 'fast-xml-parser';
 import { env } from '../lib/env.ts';
 
-const LIST_URL = 'https://openapi.work.go.kr/opi/opi/opia/wantedApi.do';
-const ALLOWED_HOSTS = ['openapi.work.go.kr']; // 이 수집기는 이 호스트 외로 요청하지 않는다
+/**
+ * 채용정보 API 엔드포인트가 두 갈래로 갈려 있다.
+ *
+ * 1) work24 — 고용24 개편 후의 신규 포털 (openapi.work.go.kr 에서 이전됨).
+ *    인증키가 UUID(36자)다. 단, **채용정보 API 는 기업·기관회원 전용**이라
+ *    개인회원 키로 호출하면 "개인회원은 사용할 수 없는 OPEN-API입니다" 가 온다.
+ *
+ * 2) legacy — 구 워크넷 엔드포인트. 공공데이터포털(data.go.kr)에서 발급한
+ *    서비스키로 호출한다. 개인도 자동승인으로 받을 수 있다.
+ *    라이선스가 KOGL 제4유형(비상업적 이용만 가능)이므로 상업적 활용은 불가하다.
+ *
+ * 어느 쪽 키를 가졌는지에 따라 엔드포인트가 달라지므로 환경변수로 고른다.
+ * `npm run keys:check` 가 양쪽을 모두 시도해 어느 것이 동작하는지 알려준다.
+ */
+export type WorknetFlavor = 'work24' | 'legacy';
+
+interface Endpoint {
+  host: string;
+  listUrl: string;
+}
+
+const ENDPOINTS: Record<WorknetFlavor, Endpoint> = {
+  // 210L01 = 채용정보 목록, 210D01 = 채용정보 상세
+  work24: {
+    host: 'www.work24.go.kr',
+    listUrl: 'https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo210L01.do',
+  },
+  legacy: {
+    host: 'openapi.work.go.kr',
+    listUrl: 'https://openapi.work.go.kr/opi/opi/opia/wantedApi.do',
+  },
+};
+
+export const WORKNET_FLAVORS = Object.keys(ENDPOINTS) as WorknetFlavor[];
+
+export function endpointOf(flavor: WorknetFlavor): Endpoint {
+  return ENDPOINTS[flavor];
+}
+
 const PAGE_SIZE = 100; // API 상한
 const MAX_PAGE_BYTES = 8 * 1024 * 1024;
+
+/** 알려진 엔드포인트 호스트만 허용한다. 설정 오류로 임의 호스트에 키를 보내는 것을 막는다. */
+export function assertKnownHost(hostname: string): string {
+  const known = WORKNET_FLAVORS.some((f) => ENDPOINTS[f].host === hostname);
+  if (!known) throw new Error(`알려지지 않은 워크넷 API 호스트입니다: ${hostname}`);
+  return hostname;
+}
+
+/** 목록 조회 URL. 검사 스크립트와 수집기가 같은 코드를 쓰도록 export 한다. */
+export function buildListUrl(
+  page: number,
+  display = PAGE_SIZE,
+  flavor: WorknetFlavor = env.worknetFlavor,
+): URL {
+  const url = new URL(ENDPOINTS[flavor].listUrl);
+  url.searchParams.set('authKey', env.worknetKey);
+  url.searchParams.set('callTp', 'L');
+  url.searchParams.set('returnType', 'XML');
+  url.searchParams.set('startPage', String(page));
+  url.searchParams.set('display', String(display));
+  return url;
+}
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -63,13 +122,7 @@ export const worknetCollector: Collector = {
 };
 
 async function fetchPage(page: number): Promise<Record<string, unknown>[]> {
-  const url = new URL(LIST_URL);
-  url.searchParams.set('authKey', env.worknetKey);
-  url.searchParams.set('callTp', 'L');
-  url.searchParams.set('returnType', 'XML');
-  url.searchParams.set('startPage', String(page));
-  url.searchParams.set('display', String(PAGE_SIZE));
-
+  const url = buildListUrl(page);
   const xml = await fetchWithRetry(url);
   // 외부 XML -> 객체 변환 직후 위험 키를 제거한다. 이 결과는 재귀 순회되고 jsonb 로 저장된다.
   const parsed = stripDangerousKeys(parser.parse(xml)) as Record<string, any>;
@@ -88,7 +141,9 @@ async function fetchWithRetry(url: URL, attempts = 4): Promise<string> {
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await safeFetch(url, {
-        allowHosts: ALLOWED_HOSTS, // 호스트 고정 = DNS rebinding 무관
+        // 호스트 고정 = DNS rebinding 무관. URL 에서 호스트를 뽑되,
+        // 알려진 엔드포인트 목록에 없으면 요청하지 않는다.
+        allowHosts: [assertKnownHost(url.hostname)],
         maxBytes: MAX_PAGE_BYTES,
         maxRedirects: 0,
         timeoutMs: 30_000,
