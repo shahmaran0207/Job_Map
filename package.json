@@ -13,6 +13,7 @@
     "collect:worknet": "tsx src/collectors/run.ts --source=worknet",
     "geocode": "tsx src/scripts/geocode-pending.ts",
     "stats": "tsx src/scripts/stats.ts",
+    "test:ingest": "tsx src/scripts/smoke-ingest.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

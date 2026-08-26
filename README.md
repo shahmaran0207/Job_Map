@@ -152,12 +152,19 @@
 npm install
 cp .env.example .env      # DATABASE_URL, WORKNET_API_KEY, KAKAO_REST_KEY 채우기
 
+npm run db:check          # 연결 / TLS / PostGIS 진단 — 문제 원인을 특정해준다
 npm run migrate           # 스키마 생성 (PostGIS 확장 포함)
 npm run collect           # 공고 수집 + 적재
 npm run geocode           # 근무지 좌표 확보 (배치, 쿼터 분리)
 npm run stats             # 데이터 규모 / 좌표 정밀도 / 시계열 결측일 점검
+
+npm run test:ingest       # 적재 경로 스모크 테스트 (실제 DB, 끝나면 정리)
 npm run typecheck
 ```
+
+`db:check`를 먼저 돌리세요. 연결 실패 원인(예시 값 미교체, IPv6 전용 direct 연결, 비밀번호 percent-encoding 누락, 자체 CA 인증서 필요, pooler 사용자명 형식)을 구분해서 알려줍니다.
+
+`test:ingest`는 배치 적재 SQL을 실제 DB에서 검증합니다. 타입 검사로는 `jsonb_to_recordset` 컬럼 정의, 표현식 유니크 인덱스에 대한 `ON CONFLICT`, 시계열 구간 연장, 날짜 시간대 왕복이 맞는지 알 수 없습니다. 적재 로직을 건드리면 이걸 돌리세요.
 
 첫 실행 시 `COLLECT_MAX_PAGES=2` 로 시작해 워크넷 API 필드 매핑을 확인한 뒤 전량 수집으로 넘어갈 것을 권한다. 매핑이 틀려도 `posting.raw`에 원본 payload가 전량 보존되므로 나중에 무손실로 재처리할 수 있다.
 
