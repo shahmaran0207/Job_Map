@@ -37,8 +37,23 @@ export const env = {
     return opt('DATABASE_SSL') === 'disable' ? 'disable' : 'require';
   },
 
+  // 고용24 오픈API 는 API 별로 인증키가 따로 발급된다. 하나의 계정 키로
+  // 모든 API 를 호출할 수 없으므로 용도별로 분리해 보관한다.
   get worknetKey() {
-    return req('WORKNET_API_KEY');
+    return req('WORKNET_API_KEY'); // '채용정보' API 키
+  },
+  /** '공통코드' API 키. 직종/지역 코드 마스터 적재에 쓴다. 없으면 해당 단계만 건너뛴다. */
+  get worknetCodeKey() {
+    return opt('WORKNET_CODE_API_KEY');
+  },
+  /**
+   * 채용정보 API 엔드포인트 계열.
+   *   'work24' — 고용24 신규 포털. 기업·기관회원 전용
+   *   'legacy' — 구 워크넷 엔드포인트. 공공데이터포털 발급 키로 개인도 사용 가능
+   * 기본값은 legacy 다. 개인 개발자가 실제로 받을 수 있는 키가 그쪽이기 때문이다.
+   */
+  get worknetFlavor(): 'work24' | 'legacy' {
+    return opt('WORKNET_API_FLAVOR') === 'work24' ? 'work24' : 'legacy';
   },
   get kakaoRestKey() {
     return opt('KAKAO_REST_KEY');

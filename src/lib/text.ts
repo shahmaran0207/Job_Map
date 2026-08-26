@@ -19,19 +19,26 @@ export function parseSalary(raw: string | undefined | null): number | null {
   if (!m?.[1]) return null;
   const n = Number(m[1]);
   if (!Number.isFinite(n) || n === 0) return null;
-  switch (m[2]) {
-    case '억':
-      return Math.round(n * 100_000_000);
-    case '천만':
-      return Math.round(n * 10_000_000);
-    case '만원':
-    case '만':
-      return Math.round(n * 10_000);
-    default:
-      // 단위 없는 값: 워크넷은 보통 원 단위 연봉을 그대로 준다.
-      // 4자리 이하면 '만원 단위 표기'로 보는 편이 오차가 적다 (예: 3000 -> 3000만원).
-      return n < 100_000 ? Math.round(n * 10_000) : Math.round(n);
-  }
+  const won = (() => {
+    switch (m[2]) {
+      case '억':
+        return n * 100_000_000;
+      case '천만':
+        return n * 10_000_000;
+      case '만원':
+      case '만':
+        return n * 10_000;
+      default:
+        // 단위 없는 값: 워크넷은 보통 원 단위 연봉을 그대로 준다.
+        // 4자리 이하면 '만원 단위 표기'로 보는 편이 오차가 적다 (예: 3000 -> 3000만원).
+        return n < 100_000 ? n * 10_000 : n;
+    }
+  })();
+
+  // salary_min/max 는 integer 컬럼이다. 이상값이 들어오면 INSERT 가 터지면서
+  // 배치 전체가 실패하므로 여기서 잘라낸다. 20억 원 이상은 연봉으로 무의미하다.
+  if (won <= 0) return null;
+  return Math.round(Math.min(won, 2_000_000_000));
 }
 
 /** 'YYYYMMDD' | 'YYYY-MM-DD' | 'YYYY/MM/DD' -> 'YYYY-MM-DD' */
