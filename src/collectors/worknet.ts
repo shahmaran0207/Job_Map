@@ -1,8 +1,8 @@
-import { XMLParser } from 'fast-xml-parser';
-import { env } from '../lib/env.ts';
 import { capRawPayload, safeExternalUrl, safeFetch, stripDangerousKeys } from '../lib/security.ts';
 import { clean, parseCareerYears, parseDate, parseSalary } from '../lib/text.ts';
 import type { Collector, CollectorResult, NormalizedPosting } from './types.ts';
+import { XMLParser } from 'fast-xml-parser';
+import { env } from '../lib/env.ts';
 
 const LIST_URL = 'https://openapi.work.go.kr/opi/opi/opia/wantedApi.do';
 const ALLOWED_HOSTS = ['openapi.work.go.kr']; // 이 수집기는 이 호스트 외로 요청하지 않는다
