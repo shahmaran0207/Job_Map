@@ -1,0 +1,78 @@
+# 라우팅 엔진 인증 프록시.
+# nginx:alpine 이 시작 시 envsubst 로 ${ROUTING_TOKEN} 을 치환한다.
+
+# 클라이언트 IP 기준 레이트리밋. 등시선 1회 계산은 비싸므로 낮게 잡는다.
+limit_req_zone $binary_remote_addr zone=routing_rl:10m rate=5r/s;
+limit_conn_zone $binary_remote_addr zone=routing_conn:10m;
+
+# Bearer 토큰 검사. 값이 정확히 일치할 때만 1.
+map $http_authorization $routing_authorized {
+    default                        0;
+    "Bearer ${ROUTING_TOKEN}"      1;
+}
+
+server {
+    listen 8000;
+    server_name _;
+
+    # 버전 노출 차단 (정찰 난이도 상승)
+    server_tokens off;
+
+    # 요청 본문 상한. 거대 페이로드로 엔진 메모리를 태우는 것을 막는다.
+    client_max_body_size 64k;
+    client_body_timeout  10s;
+    client_header_timeout 10s;
+
+    limit_req  zone=routing_rl burst=10 nodelay;
+    limit_conn routing_conn 8;
+
+    # 인증 실패는 어떤 경로든 즉시 401. 엔진에 요청이 닿지 않는다.
+    if ($routing_authorized = 0) {
+        return 401;
+    }
+
+    # 에러 응답에 내부 정보를 담지 않는다.
+    proxy_intercept_errors on;
+    error_page 500 502 503 504 = @engine_error;
+
+    location @engine_error {
+        default_type application/json;
+        return 502 '{"error":"routing_unavailable"}';
+    }
+
+    # ── Valhalla: 도보 / 자차 ────────────────────────────────────────────────
+    # 경로 allowlist. /status 같은 정보 노출 엔드포인트는 통과시키지 않는다.
+    location = /valhalla/isochrone {
+        proxy_pass http://valhalla:8002/isochrone;
+        include /etc/nginx/snippets/proxy_common.inc;
+    }
+
+    location = /valhalla/route {
+        proxy_pass http://valhalla:8002/route;
+        include /etc/nginx/snippets/proxy_common.inc;
+    }
+
+    location = /valhalla/sources_to_targets {
+        proxy_pass http://valhalla:8002/sources_to_targets;
+        include /etc/nginx/snippets/proxy_common.inc;
+    }
+
+    # ── OTP2: 대중교통 ──────────────────────────────────────────────────────
+    location = /otp/graphql {
+        proxy_pass http://otp:8080/otp/routers/default/index/graphql;
+        include /etc/nginx/snippets/proxy_common.inc;
+    }
+
+    location = /otp/isochrone {
+        proxy_pass http://otp:8080/otp/traveltime/isochrone;
+        include /etc/nginx/snippets/proxy_common.inc;
+    }
+
+    # 헬스체크만 토큰 없이 열어둘 필요가 있다면 위 if 블록보다 앞에 별도 server 를 두어야 한다.
+    # 지금은 의도적으로 모든 경로에 인증을 요구한다.
+
+    # allowlist 에 없는 경로는 전부 차단.
+    location / {
+        return 404;
+    }
+}

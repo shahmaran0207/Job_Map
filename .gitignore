@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.next/
+.vercel/
+*.log
+
+# 비밀값. .env 와 인증서·키를 절대 커밋하지 않는다.
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# 대용량 지도/교통 데이터. 재생성 가능하므로 저장소에 넣지 않는다.
+data/osm/
+data/gtfs/
+data/valhalla_tiles/
+data/otp/
+
+.idea/
+.vscode/

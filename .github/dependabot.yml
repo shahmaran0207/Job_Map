@@ -1,0 +1,23 @@
+version: 2
+
+# 공급망 공격 대응. 의존성 취약점 패치를 자동으로 PR 로 받는다.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # 패치/마이너는 한 PR 로 묶어 리뷰 피로를 줄인다. 메이저는 개별로 본다.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly

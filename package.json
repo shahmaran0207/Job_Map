@@ -1,0 +1,28 @@
+{
+  "name": "job-map",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "migrate": "tsx src/scripts/migrate.ts",
+    "collect": "tsx src/collectors/run.ts",
+    "collect:worknet": "tsx src/collectors/run.ts --source=worknet",
+    "geocode": "tsx src/scripts/geocode-pending.ts",
+    "stats": "tsx src/scripts/stats.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "fast-xml-parser": "^4.5.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

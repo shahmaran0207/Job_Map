@@ -1,0 +1,84 @@
+# 라우팅 엔진 스택.
+#
+# 보안상 가장 중요한 사실: Valhalla 와 OTP2 에는 인증 기능이 전혀 없다.
+# 포트를 그대로 노출하면 URL 을 아는 누구나 무제한으로 경로 계산을 시킬 수 있고,
+# 그것은 곧 당신 PC 의 CPU 를 태우는 무료 연산 서비스가 된다.
+#
+# 그래서 엔진 포트는 호스트에 바인딩하지 않고(127.0.0.1 도 아님, 아예 노출 안 함)
+# 같은 도커 네트워크 안에서만 접근 가능하게 두고, 인증·레이트리밋을 하는
+# nginx 프록시 하나만 외부에 노출한다. Cloudflare Tunnel 은 이 프록시를 가리킨다.
+#
+# 방어 계층
+#   1) Cloudflare Access (Zero Trust) — 터널 앞단. 무료 티어로 서비스 토큰 인증 가능
+#   2) nginx — Bearer 토큰 검사 + 레이트리밋 + 경로 allowlist + 바디 크기 제한
+#   3) 엔진 — 외부 네트워크에 노출되지 않음
+
+services:
+  routing-proxy:
+    image: nginx:1.27-alpine
+    depends_on: [valhalla, otp]
+    ports:
+      # 로컬호스트에만 바인딩한다. 외부 노출은 Cloudflare Tunnel 이 담당한다.
+      - '127.0.0.1:8000:8000'
+    environment:
+      # openssl rand -hex 32 로 생성한 값. .env 의 ROUTING_TOKEN 과 같아야 한다.
+      ROUTING_TOKEN: ${ROUTING_TOKEN:?ROUTING_TOKEN 을 반드시 설정하세요}
+    volumes:
+      - ./nginx/routing.conf.template:/etc/nginx/templates/routing.conf.template:ro
+      - ./nginx/proxy_common.inc:/etc/nginx/snippets/proxy_common.inc:ro
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /etc/nginx/conf.d
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+
+  valhalla:
+    image: ghcr.io/valhalla/valhalla:latest
+    # ports 를 열지 않는다. 도커 내부 네트워크에서만 접근 가능.
+    expose:
+      - '8002'
+    volumes:
+      - ../data/osm:/custom_files
+      - ../data/valhalla_tiles:/valhalla_tiles
+    environment:
+      # 국토부/OSM 한국 전체 추출본을 data/osm/ 에 두고 최초 1회 타일을 빌드한다.
+      tile_urls: ''
+      build_elevation: 'False'
+      build_admins: 'True'
+      build_time_zones: 'True'
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          # 폭주하는 요청이 호스트 전체를 잡아먹지 않도록 상한을 건다.
+          memory: 6g
+
+  otp:
+    image: docker.io/opentripplanner/opentripplanner:2.5.0
+    expose:
+      - '8080'
+    volumes:
+      - ../data/otp:/var/opentripplanner
+    # 국토부 표준 GTFS + OSM 을 data/otp/ 에 두고 그래프를 빌드한다.
+    #   최초: --build --save   / 이후: --load
+    command: ['--load', '--serve']
+    environment:
+      JAVA_TOOL_OPTIONS: '-Xmx12g'
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 14g
