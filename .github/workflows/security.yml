@@ -1,0 +1,53 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 18 * * 1' # 매주 월요일 KST 03:00
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: 의존성 취약점
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts # 설치 스크립트 실행 차단 (공급망 방어)
+      - name: npm audit
+        run: npm audit --audit-level=high
+      - name: 타입 검사
+        run: npm run typecheck
+
+  secrets:
+    name: 비밀값 유출 검사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 전체 히스토리를 훑어 과거 커밋에 남은 키까지 잡는다
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: 정적 분석
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # 보안 쿼리를 확장 세트로 돌린다 (기본보다 SSRF/인젝션 커버리지가 넓다)
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3

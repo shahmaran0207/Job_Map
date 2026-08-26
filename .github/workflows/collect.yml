@@ -1,0 +1,52 @@
+name: collect
+
+# 수집기를 GitHub Actions 에서 돌린다. 서버 비용 0원이고 실패 시 메일 알림이 온다.
+# 하루 2회(KST 00:10 / 12:10). 무료 한도(월 2000분) 안에 여유롭게 들어간다.
+on:
+  schedule:
+    - cron: '10 15 * * *' # KST 00:10
+    - cron: '10 3 * * *'  # KST 12:10
+  workflow_dispatch:
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+# 최소 권한 원칙. 수집기는 저장소를 쓸 필요가 없다.
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
+      WORKNET_API_KEY: ${{ secrets.WORKNET_API_KEY }}
+      KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+      TZ: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # 설치 스크립트를 실행하지 않는다. 의존성 하나가 오염되면 시크릿이 유출되는 경로다.
+      - run: npm ci --ignore-scripts
+
+      - name: 스키마 최신화
+        run: npm run migrate
+
+      - name: 공고 수집
+        run: npm run collect
+
+      - name: 근무지 지오코딩
+        run: npm run geocode
+        continue-on-error: true # 쿼터 소진이 수집 성공을 무효화하지 않도록
+
+      - name: 데이터 상태 점검
+        if: always()
+        run: npm run stats
