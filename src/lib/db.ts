@@ -76,10 +76,9 @@ function loadCaCert(): string | undefined {
  * 이 프로젝트는 날짜를 계산이 아니라 식별자로 쓴다(수집 기준일, 마감일, 구간 경계).
  * 그러므로 Date 객체로 왕복시키지 않고 문자열로 다루는 것이 옳다.
  *
- * OID 1082 = date, 1182 = date[]
+ * OID 1082 = date. date[] (1182) 는 이 프로젝트에서 쓰지 않으므로 등록하지 않는다.
  */
 pg.types.setTypeParser(1082, (v: string) => v);
-pg.types.setTypeParser(1182, (v: string) => v);
 
 // Supabase 무료 티어는 동시 연결 수가 빡빡하다. 풀을 작게 유지한다.
 const pool = new pg.Pool({
