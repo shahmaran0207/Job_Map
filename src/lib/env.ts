@@ -46,6 +46,15 @@ export const env = {
   get worknetCodeKey() {
     return opt('WORKNET_CODE_API_KEY');
   },
+  /**
+   * 채용정보 API 엔드포인트 계열.
+   *   'work24' — 고용24 신규 포털. 기업·기관회원 전용
+   *   'legacy' — 구 워크넷 엔드포인트. 공공데이터포털 발급 키로 개인도 사용 가능
+   * 기본값은 legacy 다. 개인 개발자가 실제로 받을 수 있는 키가 그쪽이기 때문이다.
+   */
+  get worknetFlavor(): 'work24' | 'legacy' {
+    return opt('WORKNET_API_FLAVOR') === 'work24' ? 'work24' : 'legacy';
+  },
   get kakaoRestKey() {
     return opt('KAKAO_REST_KEY');
   },
