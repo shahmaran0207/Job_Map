@@ -23,8 +23,7 @@ jobs:
       - run: npm ci --ignore-scripts # 설치 스크립트 실행 차단 (공급망 방어)
       - name: npm audit
         run: npm audit --audit-level=high
-      - name: 타입 검사
-        run: npm run typecheck
+      # 타입 검사와 파싱 회귀 테스트는 ci.yml 로 옮겼다. 이 워크플로는 보안 검사만 담당한다.
 
   secrets:
     name: 비밀값 유출 검사

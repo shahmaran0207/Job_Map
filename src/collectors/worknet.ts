@@ -124,16 +124,33 @@ export const worknetCollector: Collector = {
 async function fetchPage(page: number): Promise<Record<string, unknown>[]> {
   const url = buildListUrl(page);
   const xml = await fetchWithRetry(url);
+  return parseListXml(xml);
+}
+
+/**
+ * 목록 응답 XML 을 항목 배열로 변환한다.
+ *
+ * 네트워크와 분리해 export 한다. XML 파서 라이브러리의 동작 변화(메이저
+ * 업그레이드 등)는 API 키 없이도 픽스처로 검증할 수 있어야 한다.
+ * 이 파싱이 조용히 깨지면 수집이 0건이 되고 시계열에 결측이 생긴다.
+ */
+export function parseListXml(xml: string): Record<string, unknown>[] {
   // 외부 XML -> 객체 변환 직후 위험 키를 제거한다. 이 결과는 재귀 순회되고 jsonb 로 저장된다.
   const parsed = stripDangerousKeys(parser.parse(xml)) as Record<string, any>;
 
-  const root = parsed.wantedRoot ?? parsed.WantedRoot ?? parsed.response ?? parsed;
+  const root =
+    parsed.wantedRoot ?? parsed.WantedRoot ?? parsed.GO24 ?? parsed.response ?? parsed;
   const err = clean(root?.error ?? root?.errorMsg ?? root?.message);
   if (err && !root?.wanted) throw new Error(`워크넷 API 오류: ${err}`);
 
   const wanted = root?.wanted;
   if (!wanted) return [];
   return Array.isArray(wanted) ? wanted : [wanted];
+}
+
+/** 항목 하나를 정규화한다. 픽스처 테스트에서 매핑을 검증하기 위해 export 한다. */
+export function mapListItem(item: Record<string, unknown>): NormalizedPosting | null {
+  return mapItem(item);
 }
 
 async function fetchWithRetry(url: URL, attempts = 4): Promise<string> {
