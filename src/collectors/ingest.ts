@@ -1,6 +1,6 @@
-import { one, query } from '../lib/db.ts';
 import { normalizeCompanyName } from '../lib/text.ts';
 import type { NormalizedPosting } from './types.ts';
+import { one, query } from '../lib/db.ts';
 
 /** 변경 감지 대상 필드. 전량을 매일 쌓지 않고 이 필드가 바뀐 순간만 기록한다. */
 const TRACKED = ['title', 'salary_min', 'salary_max', 'closes_on', 'education', 'career_type'] as const;

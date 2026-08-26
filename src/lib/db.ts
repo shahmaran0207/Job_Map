@@ -5,21 +5,27 @@ import { env } from './env.ts';
 /**
  * DB TLS 설정.
  *
- * rejectUnauthorized: false 는 절대 쓰지 않는다. 인증서 검증을 끄면 DB 연결이
- * 중간자 공격에 그대로 노출되고, 이 DB 에는 수집 데이터 전량과 (향후) 사용자
- * 데이터가 들어간다. 흔한 편법이지만 이 프로젝트에서는 금지 사항이다.
+ * 불변 규칙: `rejectUnauthorized: false` 는 어떤 경우에도 쓰지 않는다. 인증서 검증을
+ * 끄면 DB 연결이 중간자 공격에 그대로 노출되고, 이 DB 에는 수집 데이터 전량과
+ * (향후) 사용자 데이터가 들어간다. 흔한 편법이지만 이 프로젝트에서는 금지다.
  *
- * Supabase 직접 연결은 자체 CA 로 서명되어 시스템 CA 로는 검증되지 않는다.
- * 따라서 CA 인증서를 명시적으로 주입해 검증한다.
- *   Supabase > Project Settings > Database > SSL Configuration > Download certificate
- *   저장 후  DATABASE_CA_CERT_PATH=./secrets/prod-ca.crt  (또는 DATABASE_CA_CERT 에 PEM 본문)
+ * 검증 방식은 두 가지 중 하나이며, 둘 다 정당한 검증이다.
  *
- * CA 가 없으면 연결을 거부한다. 로컬 개발용 평문 Postgres 는
- * DATABASE_SSL=disable 로 명시적으로 끌 수 있다 (localhost 한정 검사).
+ *  1) 시스템 신뢰 저장소 (기본)
+ *     공개 CA 가 발급한 인증서라면 Node 내장 루트 저장소로 검증된다.
+ *     Supabase 의 Session pooler 는 보통 이 경우에 해당한다.
+ *
+ *  2) CA 인증서 고정 (선택적 강화)
+ *     DATABASE_CA_CERT_PATH 또는 DATABASE_CA_CERT 를 주면 그 CA 만 신뢰한다.
+ *     공개 CA 중 하나가 오발급되는 상황까지 막는 추가 방어이며,
+ *     Supabase 자체 CA 로 서명된 direct 연결에서는 필수가 된다.
+ *
+ * 어느 쪽인지는 `npm run db:check` 로 확인한다.
+ * 로컬 평문 Postgres 는 DATABASE_SSL=disable 로만 끌 수 있고, localhost 에 한정된다.
  */
 type SslConfig = pg.PoolConfig['ssl'];
 
-function buildSslConfig(): SslConfig {
+export function buildSslConfig(): SslConfig {
   if (env.databaseSslMode === 'disable') {
     if (!env.databaseIsLocal) {
       throw new Error(
@@ -30,20 +36,19 @@ function buildSslConfig(): SslConfig {
   }
 
   const ca = loadCaCert();
-  if (!ca) {
-    throw new Error(
-      'DB TLS 검증용 CA 인증서가 없습니다. DATABASE_CA_CERT_PATH 또는 DATABASE_CA_CERT 를 설정하세요.\n' +
-        '  Supabase > Project Settings > Database > SSL Configuration 에서 인증서를 내려받을 수 있습니다.\n' +
-        '  (인증서 검증을 끄는 우회는 이 프로젝트에서 허용하지 않습니다.)',
-    );
-  }
 
   return {
-    ca,
-    rejectUnauthorized: true,
+    // ca 가 있으면 그 CA 만 신뢰(고정), 없으면 시스템 루트 저장소로 검증.
+    ...(ca ? { ca } : {}),
+    rejectUnauthorized: true, // 어떤 경로에서도 false 로 내려가지 않는다
     minVersion: 'TLSv1.2',
     servername: env.databaseHost, // SNI + 인증서 호스트명 검증 대상을 명시
   };
+}
+
+/** CA 고정이 켜져 있는지. 진단 스크립트가 상태를 표시하는 데 쓴다. */
+export function isCaPinned(): boolean {
+  return loadCaCert() !== undefined;
 }
 
 function loadCaCert(): string | undefined {
