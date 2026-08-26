@@ -65,6 +65,22 @@ function loadCaCert(): string | undefined {
   }
 }
 
+/**
+ * DATE 컬럼을 문자열('YYYY-MM-DD')로 그대로 받는다.
+ *
+ * node-postgres 는 기본적으로 DATE 를 "로컬 시간대 자정의 Date 객체"로 파싱한다.
+ * 그 값을 toISOString() 으로 다시 문자열화하면 KST(UTC+9)에서는 9시간이 빠져
+ * **하루 전날**이 된다. 그러면 DB 에 저장된 날짜와 코드가 읽은 날짜가 달라지고,
+ * 변경 감지가 매 실행마다 가짜 변경을 기록한다(closes_on 이 매일 바뀐 것처럼 보임).
+ *
+ * 이 프로젝트는 날짜를 계산이 아니라 식별자로 쓴다(수집 기준일, 마감일, 구간 경계).
+ * 그러므로 Date 객체로 왕복시키지 않고 문자열로 다루는 것이 옳다.
+ *
+ * OID 1082 = date, 1182 = date[]
+ */
+pg.types.setTypeParser(1082, (v: string) => v);
+pg.types.setTypeParser(1182, (v: string) => v);
+
 // Supabase 무료 티어는 동시 연결 수가 빡빡하다. 풀을 작게 유지한다.
 const pool = new pg.Pool({
   connectionString: env.databaseUrl,
