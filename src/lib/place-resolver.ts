@@ -2,30 +2,32 @@ import { confidenceOf, geocode, type GeoResult } from './geocode.ts';
 import { clean } from './text.ts';
 
 /**
- * 근무지 좌표 확정.
+ * 장소 좌표 확정. 이 프로젝트의 핵심 엔진이며 도메인에 중립적이다.
  *
- * 이 모듈이 제품의 성립 조건이다. 이유:
+ * 두 종류의 입력을 같은 방식으로 다룬다.
+ *   - 거주지: 국토부 실거래가의 아파트/오피스텔 단지명 + 법정동 + 지번
+ *   - 근무지: 채용 공고의 회사명 + 근무지역
  *
- * 사람인 API 는 근무지를 시군구 해상도로만 준다("서울 > 관악구"). 시군구
- * 중심점으로 통근시간을 계산하면 관악구만 해도 동서 5km 오차가 생기고,
- * "도보 30분 이내" 필터가 의미를 잃는다. 워크넷도 상세주소가 없는 공고가 많다.
+ * 왜 필요한가: 두 소스 모두 좌표를 주지 않고, 주소 해상도가 시군구~법정동
+ * 수준인 경우가 많다. 관악구 중심점으로 통근시간을 계산하면 구 하나가 동서
+ * 5km 이므로 "도보 30분 이내" 필터가 의미를 잃는다.
  *
- * 그래서 시군구를 건물 단위로 끌어올리는 것이 핵심 과제다. 핵심 착안점은
- * **회사명 + 시군구 키워드 검색**이다. '카카오 판교', '삼성전자 수원' 처럼
- * 상호와 지역을 함께 검색하면 실제 사업장 건물이 잡힌다. 지사·공장도 이 경로로
- * 상당 부분 해결된다.
+ * 핵심 착안점은 **이름 + 지역 키워드 검색**이다. '카카오 판교', '삼성전자 수원',
+ * '래미안 대치' 처럼 고유명과 지역을 함께 검색하면 실제 건물이 잡힌다.
+ * 실측 결과 상세주소로 얻은 좌표와 1m 수준으로 일치한다.
  *
  * 그리고 얻은 좌표를 통근 계산에 써도 되는지를 데이터에 명시한다. 정확도 낮은
  * 좌표로 통근시간을 계산해 보여주면 지도가 조용히 거짓말을 하게 된다.
  */
 
-export type ResolveStrategy = 'address' | 'company_region' | 'company' | 'region_centroid';
+export type ResolveStrategy = 'address' | 'name_region' | 'name' | 'region_centroid';
 
 export interface ResolveInput {
-  companyName: string;
-  /** 공고에 적힌 주소 원문. 상세주소일 수도, '서울 관악구' 수준일 수도 있다. */
+  /** 고유명. 회사명(채용) 또는 단지명·건물명(거주지). */
+  name: string;
+  /** 주소 원문. 상세주소일 수도, '서울 관악구' 수준일 수도 있다. */
   rawAddress: string | null;
-  /** '서울 > 관악구' 같은 지역 표기 */
+  /** '서울 > 관악구', '경기 성남시 분당구' 같은 지역 표기 */
   regionHint: string | null;
 }
 
@@ -51,27 +53,27 @@ const COMMUTE_THRESHOLD = 0.8;
 /** 이 값 이상이면 더 나은 전략을 시도하지 않고 확정한다. */
 const GOOD_ENOUGH = 0.95;
 
-export async function resolveWorksite(input: ResolveInput): Promise<Resolution | null> {
-  const company = clean(input.companyName, 100);
-  if (!company) return null;
+export async function resolvePlace(input: ResolveInput): Promise<Resolution | null> {
+  const name = clean(input.name, 100);
+  if (!name) return null;
 
   const region = parseRegion(input.rawAddress ?? input.regionHint);
   const hasDetailedAddress = looksDetailed(input.rawAddress);
 
   // 전략 순서가 중요하다. 상세주소가 있으면 그것이 가장 정확하고,
-  // 없으면 회사명+지역 키워드 검색이 시군구를 건물로 승격시킨다.
+  // 없으면 이름+지역 키워드 검색이 시군구를 건물로 승격시킨다.
   const candidates: { strategy: ResolveStrategy; query: string }[] = [];
 
   if (hasDetailedAddress && input.rawAddress) {
     candidates.push({ strategy: 'address', query: input.rawAddress });
   }
   if (region.full) {
-    candidates.push({ strategy: 'company_region', query: `${company} ${region.full}` });
+    candidates.push({ strategy: 'name_region', query: `${name} ${region.full}` });
   }
   if (region.sigungu) {
-    candidates.push({ strategy: 'company_region', query: `${company} ${region.sigungu}` });
+    candidates.push({ strategy: 'name_region', query: `${name} ${region.sigungu}` });
   }
-  candidates.push({ strategy: 'company', query: company });
+  candidates.push({ strategy: 'name', query: name });
 
   let best: Resolution | null = null;
 
@@ -80,7 +82,7 @@ export async function resolveWorksite(input: ResolveInput): Promise<Resolution |
     if (!hit) continue;
 
     // 지역 정보가 있으면 결과가 그 지역에 있는지 검증한다.
-    // 검증 없이 받으면 동명 회사의 다른 지역 사업장을 잡는다.
+    // 검증 없이 받으면 동명 대상의 다른 지역 건물을 잡는다.
     if (region.sigungu && hit.sigungu && !sameRegion(region, hit)) continue;
 
     const resolution = toResolution(hit, c.strategy, c.query);
@@ -166,7 +168,7 @@ export function parseRegion(text: string | null | undefined): Region {
   };
 }
 
-/** 지오코딩 결과가 기대한 지역에 있는지 확인한다. 동명 회사의 타지역 사업장을 배제한다. */
+/** 지오코딩 결과가 기대한 지역에 있는지 확인한다. 동명 대상의 타지역 건물을 배제한다. */
 function sameRegion(expected: Region, hit: GeoResult): boolean {
   if (!expected.sigungu || !hit.sigungu) return true; // 비교 불가면 통과
   const a = shortSido(expected.sido);

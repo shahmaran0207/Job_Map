@@ -1,6 +1,6 @@
 import { closeDb, query } from '../lib/db.ts';
 import { env } from '../lib/env.ts';
-import { resolveWorksite } from '../lib/worksite-resolver.ts';
+import { resolvePlace } from '../lib/place-resolver.ts';
 
 /**
  * 좌표가 없는 근무지를 배치로 해결한다.
@@ -39,8 +39,8 @@ async function main(): Promise<void> {
   let miss = 0;
 
   for (const [i, w] of pending.entries()) {
-    const r = await resolveWorksite({
-      companyName: w.company_name,
+    const r = await resolvePlace({
+      name: w.company_name,
       rawAddress: w.raw_address,
       regionHint: w.raw_address,
     });
