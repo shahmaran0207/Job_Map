@@ -171,14 +171,30 @@ export function parseRegion(text: string | null | undefined): Region {
 /** 지오코딩 결과가 기대한 지역에 있는지 확인한다. 동명 대상의 타지역 건물을 배제한다. */
 function sameRegion(expected: Region, hit: GeoResult): boolean {
   if (!expected.sigungu || !hit.sigungu) return true; // 비교 불가면 통과
-  const a = shortSido(expected.sido);
-  const b = shortSido(hit.sido);
-  if (a && b && a !== b) return false;
+  if (!sameSido(expected.sido, hit.sido)) return false;
 
   // '성남시 분당구' vs '분당구' 처럼 표기가 달라 부분 일치로 본다.
   const exp = expected.sigungu.replace(/\s/g, '');
   const got = hit.sigungu.replace(/\s/g, '');
   return exp.includes(got) || got.includes(exp);
+}
+
+/**
+ * 행정구역 통합으로 같은 지역이 여러 이름으로 불리는 경우를 묶는다.
+ *
+ * 실측: 법정동코드 체계에서 광주광역시와 전라남도가 '전남광주통합특별시' 로
+ * 통합되었다. 반면 Kakao 지오코딩은 여전히 '광주' / '전남' 을 반환한다. 이 둘을
+ * 다르다고 판정하면 광주·전남의 모든 건물이 지역 검증에서 거부되어, 해당
+ * 지역 데이터가 통째로 통근 계산에서 빠진다.
+ */
+const SIDO_ALIAS_GROUPS: string[][] = [['전남광주통합', '광주', '전남', '전라남']];
+
+function sameSido(a: string | null, b: string | null): boolean {
+  const x = shortSido(a);
+  const y = shortSido(b);
+  if (!x || !y) return true; // 비교 불가면 통과
+  if (x === y) return true;
+  return SIDO_ALIAS_GROUPS.some((g) => g.includes(x) && g.includes(y));
 }
 
 /** '서울특별시' / '서울' 을 같게 본다. */
