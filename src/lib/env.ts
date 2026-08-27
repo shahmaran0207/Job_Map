@@ -11,6 +11,23 @@ function req(name: string): string {
   return v;
 }
 
+/**
+ * 숫자 환경변수를 관대하게 읽는다.
+ *
+ * `.env` 에 `COLLECT_MAX_PAGES=0  # 0 = 무제한` 처럼 인라인 주석을 쓰면 dotenv
+ * 버전에 따라 주석이 값에 섞여 들어오고, Number() 가 NaN 이 된다. 그러면 수집
+ * 페이지 상한이 조용히 깨져 데이터가 누락된다. 첫 정수만 뽑아 쓰고, 못 찾으면
+ * 기본값으로 떨어진다.
+ */
+function num(name: string, fallback: number): number {
+  const raw = opt(name);
+  if (!raw) return fallback;
+  const m = raw.match(/-?\d+/);
+  if (!m) return fallback;
+  const n = Number(m[0]);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /** DATABASE_URL 을 파싱한다. 실패 시에도 접속 문자열(비밀번호 포함)을 에러에 담지 않는다. */
 function parseDbUrl(): URL {
   try {
@@ -79,8 +96,8 @@ export const env = {
     return opt('ROUTING_TOKEN');
   },
 
-  collectMaxPages: Number(opt('COLLECT_MAX_PAGES') ?? 0),
-  geocodeDailyLimit: Number(opt('GEOCODE_DAILY_LIMIT') ?? 50_000),
+  collectMaxPages: num('COLLECT_MAX_PAGES', 0),
+  geocodeDailyLimit: num('GEOCODE_DAILY_LIMIT', 50_000),
 
   isProduction: process.env.NODE_ENV === 'production',
 };

@@ -114,12 +114,16 @@ async function probe(path: string, ym: string): Promise<'ok' | 'fail'> {
 
     const first = list[0] as Record<string, unknown>;
     console.log(`      필드: ${Object.keys(first).join(', ')}`);
-    // 주소 해상도 판정에 필요한 항목만 골라 값까지 보여준다.
-    const sample = Object.entries(first)
-      .filter(([k]) => /법정동|지번|아파트|단지|건물|도로|보증금|월세|면적|층|건축|년|월|일|계약/.test(k))
-      .map(([k, v]) => `${k}=${String(v)}`)
-      .join(' | ');
-    console.log(`      표본: ${sample}`);
+
+    // 값의 실제 형태를 봐야 한다. 특히 금액 단위(원 vs 만원)와 쉼표 포함 여부는
+    // 틀리면 시세가 1만배 어긋나면서도 예외가 나지 않는 종류의 오류다.
+    for (const item of list.slice(0, 2)) {
+      const rec = item as Record<string, unknown>;
+      const sample = Object.entries(rec)
+        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+        .join(' ');
+      console.log(`      표본: ${sample}`);
+    }
     return 'ok';
   } catch (e) {
     console.log(`    ✗ ${path}  요청 실패: ${String(e).slice(0, 120)}`);
