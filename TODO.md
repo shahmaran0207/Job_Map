@@ -36,7 +36,64 @@
 
 ## 1. 실거래가 수집기
 
-`src/collectors/molit-rent.ts`. `probe:molit` 결과로 매핑을 확정한 뒤 구현한다.
+`src/collectors/molit-rent.ts`.
+
+### 확정된 API 스펙 (2026-08-26 실측)
+
+호스트 `apis.data.go.kr`, 공통 파라미터 `serviceKey` / `LAWD_CD`(시군구 5자리) / `DEAL_YMD`(YYYYMM) / `numOfRows` / `pageNo`.
+
+| 유형 | 경로 |
+|---|---|
+| `apt` | `/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent` |
+| `offi` | `/1613000/RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent` |
+| `rh` | `/1613000/RTMSDataSvcRHRent/getRTMSDataSvcRHRent` |
+| `sh` | `/1613000/RTMSDataSvcSHRent/getRTMSDataSvcSHRent` |
+
+**응답 필드는 문서의 한국어 명칭이 아니라 영문 camelCase 다.** 실측 결과:
+
+| 의미 | apt | offi | rh | sh |
+|---|---|---|---|---|
+| 건물명 | `aptNm` | `offiNm` | `mhouseNm` | **없음** |
+| 안정 ID | `aptSeq` | — | — | — |
+| 지번 | `jibun` | `jibun` | `jibun` | **없음** |
+| 법정동 | `umdNm` | `umdNm` | `umdNm` | `umdNm` |
+| 도로명 | `roadnm` 외 6개 | — | — | — |
+| 시군구코드 | `sggCd` | `sggCd` | `sggCd` | `sggCd` |
+| 시군구명 | **없음** | `sggNm` | **없음** | **없음** |
+| 보증금 | `deposit` | `deposit` | `deposit` | `deposit` |
+| 월세 | `monthlyRent` | `monthlyRent` | `monthlyRent` | `monthlyRent` |
+| 면적 | `excluUseAr` | `excluUseAr` | `excluUseAr` | `totalFloorAr` |
+| 층 | `floor` | `floor` | `floor` | **없음** |
+| 건축년도 | `buildYear` | `buildYear` | `buildYear` | `buildYear` |
+| 주택유형 | — | — | `houseType` | `houseType` |
+| 계약 | `contractType` / `contractTerm` / `useRRRight` / `preDeposit` / `preMonthlyRent` (4종 공통) |
+
+### ⚠️ 금액 단위 — 만원, 쉼표 포함 문자열
+
+```
+deposit="70,000"  monthlyRent="230"   -> 보증금 7억, 월세 230만원
+deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
+```
+
+**쉼표 제거 후 × 10,000 을 해야 원 단위가 된다.** 틀려도 예외가 나지 않고 시세만 1만배 어긋나므로, 파서에 단위 테스트를 반드시 붙인다.
+
+### 그 외 실측 사항
+
+- 날짜는 `dealYear` / `dealMonth` / `dealDay` 로 분리되고 **0 패딩이 없다**(`"6"`, `"25"`)
+- `contractType` / `contractTerm` / `useRRRight` / `preDeposit` / `preMonthlyRent` 는 빈 문자열인 경우가 많다
+- `sh` 의 `buildYear` 도 빈 값이 있다
+- **`rh` 의 `mhouseNm` 이 지번 숫자인 경우가 있다**(`mhouseNm="1213"`). 이름 검색이 무의미하므로 지번주소를 우선한다
+- `apt` 의 `roadnm` 은 `"언주로30길 21"` 처럼 번호까지 포함된 완전한 도로명이다 -> `{시군구명} {roadnm}` 으로 건물 정밀도 직행
+- **`apt`/`rh`/`sh` 에는 시군구명이 없다.** 주소를 조립하려면 2번(법정동코드 마스터)이 선행되어야 한다
+
+### 좌표 해결 전략 (유형별)
+
+1. `apt` — `{시군구명} {roadnm}` (도로명주소)
+2. `offi`/`rh` — `{시군구명} {umdNm} {jibun}` (지번주소). 검증됨: `"서울특별시 서초구 반포동 2-12"` -> 건물 정밀도
+3. 폴백 — `{건물명} {시군구명}` (`place-resolver` 의 `name_region`)
+4. `sh` — `{시군구명} {umdNm}` 중심점, `commute_usable=false`
+
+### 구현 메모
 
 - 주택 유형 4종을 하나의 수집기로 처리하고 유형별 필드명 차이는 후보 키 순회로 흡수
 - `NormalizedPosting` 과 같은 방식으로 `NormalizedDeal` 계약을 두고 적재 코드를 하나로 유지
