@@ -16,7 +16,8 @@
     "stats": "tsx src/scripts/stats.ts",
     "test:ingest": "tsx src/scripts/smoke-ingest.ts",
     "test:parse": "tsx src/scripts/smoke-worknet.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:resolver": "tsx src/scripts/smoke-resolver.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

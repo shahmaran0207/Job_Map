@@ -28,6 +28,38 @@ async function main(): Promise<void> {
     for (const r of precision) console.log(`${(r.geo_precision ?? 'unknown').padEnd(10)} ${r.n}`);
   }
 
+  // 통근시간 계산에 쓸 수 있는 좌표의 비율. 이 값이 곧 지도의 신뢰도다.
+  // 낮으면 지도가 "도보 30분" 이라고 표시하면서 실제로는 시군구 중심점을 쓴다.
+  const quality = await query<{
+    strategy: string; precision: string; commute_usable: boolean;
+    worksites: string; open_postings: string;
+  }>(`SELECT strategy, precision, commute_usable, worksites, open_postings FROM worksite_quality`);
+
+  if (quality.length) {
+    console.log('\n── 좌표 품질 (전략별) ───────────────────────');
+    let usableSites = 0;
+    let usablePostings = 0;
+    let totalPostings = 0;
+    for (const r of quality) {
+      const flag = r.commute_usable ? '통근O' : '통근X';
+      console.log(
+        `${flag} ${r.strategy.padEnd(16)} ${r.precision.padEnd(10)} ` +
+          `근무지 ${String(r.worksites).padStart(6)} 공고 ${String(r.open_postings).padStart(7)}`,
+      );
+      totalPostings += Number(r.open_postings);
+      if (r.commute_usable) {
+        usableSites += Number(r.worksites);
+        usablePostings += Number(r.open_postings);
+      }
+    }
+    if (totalPostings > 0) {
+      console.log(
+        `\n통근시간 계산 가능 공고: ${usablePostings}/${totalPostings} ` +
+          `(${((usablePostings / totalPostings) * 100).toFixed(1)}%), 근무지 ${usableSites}건`,
+      );
+    }
+  }
+
   console.log('\n── 최근 수집 실행 ───────────────────────────');
   const runs = await query<{
     run_date: string; source: string; status: string; seen_count: number;

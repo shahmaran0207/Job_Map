@@ -156,9 +156,12 @@ npm run db:check          # 연결 / TLS / PostGIS 진단 — 문제 원인을 �
 npm run migrate           # 스키마 생성 (PostGIS 확장 포함)
 npm run collect           # 공고 수집 + 적재
 npm run geocode           # 근무지 좌표 확보 (배치, 쿼터 분리)
-npm run stats             # 데이터 규모 / 좌표 정밀도 / 시계열 결측일 점검
+npm run geocode -- --improve   # 통근 계산 불가 근무지만 재시도 (정밀도 개선)
+npm run stats             # 데이터 규모 / 좌표 품질 / 시계열 결측일 점검
 
+npm run test:parse        # 응답 파싱 회귀 테스트 (네트워크·DB 불필요)
 npm run test:ingest       # 적재 경로 스모크 테스트 (실제 DB, 끝나면 정리)
+npm run test:resolver     # 근무지 좌표 해결기 (실제 Kakao API 호출)
 npm run typecheck
 ```
 
