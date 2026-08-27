@@ -113,6 +113,16 @@ const CASES: {
     rawAddress: '서울특별시 관악구 신림동',
     expectCommuteUsable: false,
   },
+
+  // 행정구역 통합 대응. 법정동코드는 '전남광주통합특별시' 를 쓰지만 Kakao 는
+  // '광주' 를 반환한다. 지역 검증이 이 둘을 다르다고 보면 광주·전남 데이터가
+  // 통째로 통근 계산에서 빠진다.
+  {
+    label: '[통합구역] 전남광주통합특별시 표기 + 광주 실주소',
+    name: '광주광역시청',
+    rawAddress: '전남광주통합특별시 서구',
+    expectCommuteUsable: true,
+  },
 ];
 
 async function testResolution(): Promise<void> {
