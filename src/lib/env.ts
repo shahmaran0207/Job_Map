@@ -59,6 +59,19 @@ export const env = {
     return opt('KAKAO_REST_KEY');
   },
 
+  /**
+   * 공공데이터포털 인증키(일반 인증키 / Decoding).
+   *
+   * 고용24와 달리 공공데이터포털은 **계정당 키 1개를 모든 API 에 공용**으로 쓴다.
+   * 국토부 실거래가 4종(아파트/오피스텔/연립다세대/단독다가구)이 이 키 하나로 동작한다.
+   *
+   * Encoding 키를 넣으면 URLSearchParams 가 다시 인코딩해 이중 인코딩이 되고
+   * 인증이 실패한다. 반드시 Decoding 키를 넣어야 한다.
+   */
+  get molitKey() {
+    return req('MOLIT_API_KEY');
+  },
+
   // 자체 호스팅 라우팅 엔진. 엔진 자체에는 인증 기능이 없으므로
   // 반드시 인증 프록시 뒤에 두고 이 토큰을 붙여 호출한다. (docker/ 참고)
   routingUrl: opt('ROUTING_URL'),

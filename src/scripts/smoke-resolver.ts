@@ -1,5 +1,5 @@
 import { closeDb } from '../lib/db.ts';
-import { looksDetailed, parseRegion, resolveWorksite } from '../lib/worksite-resolver.ts';
+import { looksDetailed, parseRegion, resolvePlace } from '../lib/place-resolver.ts';
 
 /**
  * 근무지 좌표 해결기 검증.
@@ -48,41 +48,69 @@ function testPureFunctions(): void {
 /** 실제 공고에서 흔한 입력 패턴들. 시군구만 주어진 경우가 핵심 검증 대상이다. */
 const CASES: {
   label: string;
-  companyName: string;
+  name: string;
   rawAddress: string | null;
   expectStrategy?: string;
   expectCommuteUsable: boolean;
 }[] = [
   {
     label: '상세주소가 있는 경우',
-    companyName: '카카오',
+    name: '카카오',
     rawAddress: '경기도 성남시 분당구 판교역로 166',
     expectStrategy: 'address',
     expectCommuteUsable: true,
   },
   {
     label: '시군구만 (사람인 표기) — 대기업',
-    companyName: '카카오',
+    name: '카카오',
     rawAddress: '경기 > 성남시 분당구',
     expectCommuteUsable: true,
   },
   {
     label: '시군구만 — 지사/공장',
-    companyName: '삼성전자',
+    name: '삼성전자',
     rawAddress: '경기 > 수원시 영통구',
     expectCommuteUsable: true,
   },
   {
     label: '시군구만 — 서울 소재',
-    companyName: '네이버',
+    name: '네이버',
     rawAddress: '경기 > 성남시 분당구',
     expectCommuteUsable: true,
   },
   {
     label: '존재하지 않는 회사 + 시군구 (중심점 폴백)',
-    companyName: '없는회사이름테스트12345',
+    name: '없는회사이름테스트12345',
     rawAddress: '서울 > 관악구',
     expectStrategy: 'region_centroid',
+    expectCommuteUsable: false,
+  },
+
+  // ── 거주지(국토부 실거래가) 형태. 축 전환의 핵심 가정을 검증한다. ──────────
+  // 실거래가 API 는 단지명 + 법정동 + 지번을 준다. 단지명이 회사명보다 명확하므로
+  // 정확도가 더 높아야 한다. 여기가 무너지면 주거 지도가 성립하지 않는다.
+  {
+    label: '[거주] 아파트 단지명 + 법정동',
+    name: '래미안대치팰리스',
+    rawAddress: '서울특별시 강남구 대치동',
+    expectCommuteUsable: true,
+  },
+  {
+    label: '[거주] 대규모 단지',
+    name: '헬리오시티',
+    rawAddress: '서울특별시 송파구 가락동',
+    expectCommuteUsable: true,
+  },
+  {
+    label: '[거주] 지번까지 있는 경우',
+    name: '아크로리버파크',
+    rawAddress: '서울특별시 서초구 반포동 2-12',
+    expectCommuteUsable: true,
+  },
+  {
+    label: '[거주] 단지명 없음 (단독다가구) → 중심점 폴백',
+    name: '단독주택',
+    rawAddress: '서울특별시 관악구 신림동',
     expectCommuteUsable: false,
   },
 ];
@@ -92,8 +120,8 @@ async function testResolution(): Promise<void> {
   console.log('── 좌표 해결 (실제 Kakao API) ───────────────');
 
   for (const c of CASES) {
-    const r = await resolveWorksite({
-      companyName: c.companyName,
+    const r = await resolvePlace({
+      name: c.name,
       rawAddress: c.rawAddress,
       regionHint: c.rawAddress,
     });
