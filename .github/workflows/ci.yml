@@ -31,3 +31,17 @@ jobs:
 
       - name: 응답 파싱 회귀 테스트
         run: npm run test:parse
+
+      - name: 실거래가 파싱 회귀 테스트
+        run: npm run test:molit
+
+      # 웹 빌드도 게이트에 넣는다. Dependabot 이 typescript 7 을 올렸을 때
+      # next.config.ts 로드가 깨졌는데 타입 검사만으로는 잡히지 않았다.
+      - name: 웹 빌드
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          # 빌드는 DB 에 접속하지 않는다. 라우트는 force-dynamic 이라
+          # 프리렌더 단계에서 쿼리가 실행되지 않는다.
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          DATABASE_SSL: disable

@@ -1,4 +1,4 @@
-import { assertKoreanCoord } from './security.ts';
+import { assertKoreanCoord } from './security';
 
 /**
  * 격자 스냅.

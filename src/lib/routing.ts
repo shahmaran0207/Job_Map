@@ -1,5 +1,5 @@
-import { env } from './env.ts';
-import { assertKoreanCoord, safeFetch } from './security.ts';
+import { env } from './env';
+import { assertKoreanCoord, safeFetch } from './security';
 
 /**
  * 라우팅 엔진 클라이언트.

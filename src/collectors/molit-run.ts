@@ -1,8 +1,8 @@
-import { closeDb, one, query } from '../lib/db.ts';
-import { today } from '../lib/env.ts';
-import { ingestDeals } from './molit-ingest.ts';
-import { fetchSlot, isHousingType } from './molit-rent.ts';
-import { HOUSING_LABEL, HOUSING_TYPES, type HousingType, type Slot } from './molit-types.ts';
+import { closeDb, one, query } from '../lib/db';
+import { today } from '../lib/env';
+import { ingestDeals } from './molit-ingest';
+import { fetchSlot, isHousingType } from './molit-rent';
+import { HOUSING_LABEL, HOUSING_TYPES, type HousingType, type Slot } from './molit-types';
 
 /**
  * 실거래가 수집 오케스트레이터.

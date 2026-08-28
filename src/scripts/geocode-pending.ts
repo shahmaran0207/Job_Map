@@ -1,6 +1,6 @@
-import { closeDb, query } from '../lib/db.ts';
-import { env } from '../lib/env.ts';
-import { resolvePlace } from '../lib/place-resolver.ts';
+import { closeDb, query } from '../lib/db';
+import { env } from '../lib/env';
+import { resolvePlace } from '../lib/place-resolver';
 
 /**
  * 좌표가 없는 근무지를 배치로 해결한다.

@@ -24,18 +24,31 @@
     "collect:rent": "tsx src/collectors/molit-run.ts",
     "test:molit": "tsx src/scripts/smoke-molit-parse.ts",
     "stats:rent": "tsx src/scripts/stats-rent.ts",
-    "geocode:buildings": "tsx src/scripts/geocode-buildings.ts"
+    "geocode:buildings": "tsx src/scripts/geocode-buildings.ts",
+    "dev": "next dev -p 3000 -H 127.0.0.1",
+    "build": "next build",
+    "start": "next start -p 3000 -H 127.0.0.1"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
     "fast-xml-parser": "^5.11.0",
-    "pg": "^8.13.1"
+    "maplibre-gl": "^6.6.0",
+    "next": "^15.5.24",
+    "pg": "^8.13.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "postcss": "^8.5.26",
     "shadcn": "^4.19.0",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.19.2",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3"
   }
 }

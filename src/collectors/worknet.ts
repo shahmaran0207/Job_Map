@@ -1,8 +1,8 @@
-import { capRawPayload, safeExternalUrl, safeFetch, stripDangerousKeys } from '../lib/security.ts';
-import { clean, parseCareerYears, parseDate, parseSalary } from '../lib/text.ts';
-import type { Collector, CollectorResult, NormalizedPosting } from './types.ts';
+import { capRawPayload, safeExternalUrl, safeFetch, stripDangerousKeys } from '../lib/security';
+import { clean, parseCareerYears, parseDate, parseSalary } from '../lib/text';
+import type { Collector, CollectorResult, NormalizedPosting } from './types';
 import { XMLParser } from 'fast-xml-parser';
-import { env } from '../lib/env.ts';
+import { env } from '../lib/env';
 
 /**
  * 채용정보 API 엔드포인트가 두 갈래로 갈려 있다.

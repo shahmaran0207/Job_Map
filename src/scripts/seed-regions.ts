@@ -1,8 +1,8 @@
 import { XMLParser } from 'fast-xml-parser';
-import { closeDb, query } from '../lib/db.ts';
-import { env } from '../lib/env.ts';
-import { safeFetch, stripDangerousKeys } from '../lib/security.ts';
-import { clean } from '../lib/text.ts';
+import { closeDb, query } from '../lib/db';
+import { env } from '../lib/env';
+import { safeFetch, stripDangerousKeys } from '../lib/security';
+import { clean } from '../lib/text';
 
 /**
  * 법정동코드(시군구) 마스터 적재.

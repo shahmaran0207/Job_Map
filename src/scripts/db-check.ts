@@ -1,6 +1,6 @@
 import pg from 'pg';
-import { buildSslConfig, isCaPinned } from '../lib/db.ts';
-import { env } from '../lib/env.ts';
+import { buildSslConfig, isCaPinned } from '../lib/db';
+import { env } from '../lib/env';
 
 /**
  * DB 연결 진단.

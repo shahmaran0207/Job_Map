@@ -1,5 +1,5 @@
-import { env } from '../lib/env.ts';
-import { safeFetch } from '../lib/security.ts';
+import { env } from '../lib/env';
+import { safeFetch } from '../lib/security';
 
 /**
  * 고용24 채용정보 API 호출 변형 탐색.

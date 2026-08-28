@@ -1,5 +1,5 @@
 import { lookup } from 'node:dns/promises';
-import { redact } from './env.ts';
+import { redact } from './env';
 
 /**
  * 외부 요청 방어 계층.

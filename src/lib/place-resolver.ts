@@ -1,5 +1,5 @@
-import { confidenceOf, geocode, type GeoResult } from './geocode.ts';
-import { clean } from './text.ts';
+import { confidenceOf, geocode, type GeoResult } from './geocode';
+import { clean } from './text';
 
 /**
  * 장소 좌표 확정. 이 프로젝트의 핵심 엔진이며 도메인에 중립적이다.

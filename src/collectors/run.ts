@@ -1,8 +1,8 @@
-import { closeDb, one, query } from '../lib/db.ts';
-import { closeUnseen, ingest } from './ingest.ts';
-import { worknetCollector } from './worknet.ts';
-import type { Collector } from './types.ts';
-import { env, today } from '../lib/env.ts';
+import { closeDb, one, query } from '../lib/db';
+import { closeUnseen, ingest } from './ingest';
+import { worknetCollector } from './worknet';
+import type { Collector } from './types';
+import { env, today } from '../lib/env';
 
 const COLLECTORS: Collector[] = [worknetCollector];
 

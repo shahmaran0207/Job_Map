@@ -1,5 +1,5 @@
-import { closeDb } from '../lib/db.ts';
-import { looksDetailed, parseRegion, resolvePlace } from '../lib/place-resolver.ts';
+import { closeDb } from '../lib/db';
+import { looksDetailed, parseRegion, resolvePlace } from '../lib/place-resolver';
 
 /**
  * 근무지 좌표 해결기 검증.

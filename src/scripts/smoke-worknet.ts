@@ -1,4 +1,4 @@
-import { mapListItem, parseListXml } from '../collectors/worknet.ts';
+import { mapListItem, parseListXml } from '../collectors/worknet';
 
 /**
  * 워크넷 응답 파싱 회귀 테스트.
