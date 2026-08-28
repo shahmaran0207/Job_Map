@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { closeDb, query } from '../lib/db.ts';
+import { closeDb, query } from '../lib/db';
 
 const DIR = join(process.cwd(), 'db');
 

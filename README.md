@@ -211,7 +211,11 @@ npm run geocode           # 근무지 좌표 확보 (배치, 쿼터 분리)
 npm run geocode -- --improve   # 통근 계산 불가 근무지만 재시도 (정밀도 개선)
 npm run stats             # 데이터 규모 / 좌표 품질 / 시계열 결측일 점검
 
+npm run dev               # 지도 UI (http://127.0.0.1:3000)
+npm run build && npm start
+
 npm run test:parse        # 응답 파싱 회귀 테스트 (네트워크·DB 불필요)
+npm run test:molit        # 실거래가 파싱·금액 단위 회귀 테스트
 npm run test:ingest       # 적재 경로 스모크 테스트 (실제 DB, 끝나면 정리)
 npm run test:resolver     # 근무지 좌표 해결기 (실제 Kakao API 호출)
 npm run typecheck
@@ -262,7 +266,7 @@ docker/                      Valhalla + OTP2 + nginx 인증 프록시
 - [ ] 건물 좌표 해결 배치 (`place-resolver` 재사용)
 - [ ] Valhalla / OTP2 Docker Compose + 등시선 API
 - [ ] 전국 주차장 데이터 적재 + 자차 2구간 경로
-- [ ] Next.js + MapLibre 지도 (등시선 오버레이, 시세 히트맵, 예산 필터)
+- [x] Next.js + MapLibre 지도 — 1단계 완료 (직선 반경). 등시선 교체는 라우팅 엔진 이후
 - [ ] 매물 검색 딥링크 (네이버부동산·직방)
 - [ ] Cloudflare Tunnel 배포
 - [ ] *(승인 시)* 채용 레이어 복원

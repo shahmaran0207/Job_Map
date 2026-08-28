@@ -1,7 +1,7 @@
-import { assertKoreanCoord, safeFetch, stripDangerousKeys } from './security.ts';
-import { one, query } from './db.ts';
-import { clean } from './text.ts';
-import { env } from './env.ts';
+import { assertKoreanCoord, safeFetch, stripDangerousKeys } from './security';
+import { one, query } from './db';
+import { clean } from './text';
+import { env } from './env';
 
 export interface GeoResult {
   lon: number;

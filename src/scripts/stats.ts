@@ -1,4 +1,4 @@
-import { closeDb, query } from '../lib/db.ts';
+import { closeDb, query } from '../lib/db';
 
 /** 데이터 자산 상태 점검. 특히 결측일 탐지는 시계열 상품의 신뢰도와 직결된다. */
 async function main(): Promise<void> {

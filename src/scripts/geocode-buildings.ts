@@ -1,8 +1,8 @@
-import { closeDb, query } from '../lib/db.ts';
-import { env } from '../lib/env.ts';
-import { confidenceOf, geocode } from '../lib/geocode.ts';
-import { resolvePlace, type Resolution } from '../lib/place-resolver.ts';
-import { HOUSING_LABEL, type HousingType } from '../collectors/molit-types.ts';
+import { closeDb, query } from '../lib/db';
+import { env } from '../lib/env';
+import { confidenceOf, geocode } from '../lib/geocode';
+import { resolvePlace, type Resolution } from '../lib/place-resolver';
+import { HOUSING_LABEL, type HousingType } from '../collectors/molit-types';
 
 /**
  * 건물 좌표 확정 배치.

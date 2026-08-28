@@ -1,6 +1,6 @@
-import { mapItem } from '../collectors/molit-rent.ts';
-import type { Slot } from '../collectors/molit-types.ts';
-import { buildDealYm, parseArea, parseInt0, parseManwon } from '../lib/text.ts';
+import { mapItem } from '../collectors/molit-rent';
+import type { Slot } from '../collectors/molit-types';
+import { buildDealYm, parseArea, parseInt0, parseManwon } from '../lib/text';
 
 /**
  * 실거래가 파싱 회귀 테스트. 네트워크·DB 없이 돌아간다.

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
-import { env } from './env.ts';
+import { env } from './env';
 
 /**
  * DB TLS 설정.

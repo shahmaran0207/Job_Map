@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
-import { env } from '../lib/env.ts';
-import { safeFetch, stripDangerousKeys } from '../lib/security.ts';
+import { env } from '../lib/env';
+import { safeFetch, stripDangerousKeys } from '../lib/security';
 
 /**
  * 국토부 실거래가 API 엔드포인트·필드 탐색기.

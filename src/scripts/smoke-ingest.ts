@@ -1,6 +1,6 @@
-import { closeDb, one, query } from '../lib/db.ts';
-import { closeUnseen, ingest } from '../collectors/ingest.ts';
-import type { NormalizedPosting } from '../collectors/types.ts';
+import { closeDb, one, query } from '../lib/db';
+import { closeUnseen, ingest } from '../collectors/ingest';
+import type { NormalizedPosting } from '../collectors/types';
 
 /**
  * 적재 경로 스모크 테스트.

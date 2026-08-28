@@ -1,8 +1,8 @@
 import { XMLParser } from 'fast-xml-parser';
-import { env } from '../lib/env.ts';
-import { capRawPayload, safeFetch, stripDangerousKeys } from '../lib/security.ts';
-import { buildDealYm, clean, parseArea, parseInt0, parseManwon } from '../lib/text.ts';
-import { HOUSING_TYPES, type HousingType, type NormalizedDeal, type Slot } from './molit-types.ts';
+import { env } from '../lib/env';
+import { capRawPayload, safeFetch, stripDangerousKeys } from '../lib/security';
+import { buildDealYm, clean, parseArea, parseInt0, parseManwon } from '../lib/text';
+import { HOUSING_TYPES, type HousingType, type NormalizedDeal, type Slot } from './molit-types';
 
 /**
  * 국토교통부 전월세 실거래가 수집기.

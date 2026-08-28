@@ -1,4 +1,4 @@
-import { sanitizeText } from './security.ts';
+import { sanitizeText } from './security';
 
 /** 상호 정규화. 국민연금 사업장 데이터와 조인하기 위한 키를 만든다. */
 export function normalizeCompanyName(raw: string): string {

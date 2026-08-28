@@ -1,5 +1,5 @@
-import { closeDb, query } from '../lib/db.ts';
-import { HOUSING_LABEL, type HousingType } from '../collectors/molit-types.ts';
+import { closeDb, query } from '../lib/db';
+import { HOUSING_LABEL, type HousingType } from '../collectors/molit-types';
 
 /**
  * 주거 데이터 현황 점검.

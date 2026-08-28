@@ -1,6 +1,6 @@
-import { query } from '../lib/db.ts';
-import { normalizeCompanyName } from '../lib/text.ts';
-import type { NormalizedDeal } from './molit-types.ts';
+import { query } from '../lib/db';
+import { normalizeCompanyName } from '../lib/text';
+import type { NormalizedDeal } from './molit-types';
 
 /**
  * 실거래 적재.

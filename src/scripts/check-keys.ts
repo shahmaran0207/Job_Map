@@ -1,9 +1,9 @@
 import { XMLParser } from 'fast-xml-parser';
-import { WORKNET_FLAVORS, buildListUrl, endpointOf } from '../collectors/worknet.ts';
-import { closeDb } from '../lib/db.ts';
-import { env } from '../lib/env.ts';
-import { geocode } from '../lib/geocode.ts';
-import { safeFetch, stripDangerousKeys } from '../lib/security.ts';
+import { WORKNET_FLAVORS, buildListUrl, endpointOf } from '../collectors/worknet';
+import { closeDb } from '../lib/db';
+import { env } from '../lib/env';
+import { geocode } from '../lib/geocode';
+import { safeFetch, stripDangerousKeys } from '../lib/security';
 
 /**
  * 외부 API 키 검사.

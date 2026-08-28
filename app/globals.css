@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+/*
+ * 팔레트.
+ *
+ * 시세를 색으로 표현하므로 순차형(sequential) 색상이 필요하다. 명도가
+ * 단조 증가하도록 골라서, 색약이 있어도 밝기만으로 순서를 읽을 수 있게 한다.
+ * 지도 위에 얹히므로 채도를 높게 유지해야 배경 타일과 구분된다.
+ */
+@theme {
+  --color-rent-1: oklch(0.83 0.13 195);
+  --color-rent-2: oklch(0.74 0.15 165);
+  --color-rent-3: oklch(0.72 0.16 95);
+  --color-rent-4: oklch(0.68 0.18 55);
+  --color-rent-5: oklch(0.6 0.2 25);
+  /* 통근 계산 불가 건물. 회색으로 빼서 "믿을 수 없는 값"임을 시각적으로 분리한다. */
+  --color-unreliable: oklch(0.65 0.02 260);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
+    'Malgun Gothic', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 지도 팝업을 앱 톤에 맞춘다. */
+.maplibregl-popup-content {
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.18);
+  font-size: 0.8125rem;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 0.6875rem;
+}
