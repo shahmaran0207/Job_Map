@@ -41,6 +41,62 @@ export function parseSalary(raw: string | undefined | null): number | null {
   return Math.round(Math.min(won, 2_000_000_000));
 }
 
+/**
+ * 국토부 실거래가의 금액을 원 단위 정수로 변환한다.
+ *
+ * 응답은 **만원 단위 + 쉼표 포함 문자열**이다. 실측:
+ *   deposit="70,000"  -> 700,000,000원 (7억)
+ *   monthlyRent="230" -> 2,300,000원
+ *   deposit="1,000"   -> 10,000,000원
+ *
+ * 단위를 틀려도 예외가 나지 않고 시세만 1만배 어긋난다. 이 프로젝트에서 가장
+ * 조용하게 치명적인 오류 유형이므로 여기서만 변환하고 단위 테스트로 고정한다.
+ *
+ * 전세는 월세가 0 이므로 빈 값과 "0" 을 모두 0 으로 다룬다.
+ */
+export function parseManwon(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).replace(/,/g, '').trim();
+  if (s.length === 0) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 10_000);
+}
+
+/** 면적(㎡). '122.07' -> 122.07, 빈 값 -> null */
+export function parseArea(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).replace(/,/g, '').trim();
+  if (s.length === 0) return null;
+  const n = Number(s);
+  // 0 이하이거나 비현실적으로 큰 값은 오염된 데이터로 본다.
+  if (!Number.isFinite(n) || n <= 0 || n > 100_000) return null;
+  return Math.round(n * 100) / 100;
+}
+
+/** 정수 필드. 지하층('-1')과 빈 값을 함께 다룬다. */
+export function parseInt0(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).replace(/,/g, '').trim();
+  if (s.length === 0) return null;
+  const m = s.match(/-?\d+/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * 실거래가 응답의 년/월/일을 조립한다.
+ * dealMonth/dealDay 에 0 패딩이 없다('6', '25').
+ */
+export function buildDealYm(year: unknown, month: unknown): string | null {
+  const y = parseInt0(year);
+  const m = parseInt0(month);
+  if (y === null || m === null) return null;
+  if (y < 2000 || y > 2100 || m < 1 || m > 12) return null;
+  return `${y}${String(m).padStart(2, '0')}`;
+}
+
 /** 'YYYYMMDD' | 'YYYY-MM-DD' | 'YYYY/MM/DD' -> 'YYYY-MM-DD' */
 export function parseDate(raw: string | undefined | null): string | null {
   if (!raw) return null;
