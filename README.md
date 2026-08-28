@@ -255,7 +255,7 @@ docker/                      Valhalla + OTP2 + nginx 인증 프록시
 
 ## 9. 다음 작업
 
-상세 계획과 판단 근거는 [TODO.md](./TODO.md).
+상세 계획은 [TODO.md](./TODO.md), 결정과 그 근거는 [docs/JOURNAL.md](./docs/JOURNAL.md).
 
 - [ ] 실거래가 수집기 (`npm run probe:molit` 으로 엔드포인트·필드 확정 후)
 - [ ] 법정동코드 마스터 적재 + 수집 우선순위 (10,000회/일 한도 안에서 전국 훑기)
