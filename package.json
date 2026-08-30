@@ -27,7 +27,8 @@
     "geocode:buildings": "tsx src/scripts/geocode-buildings.ts",
     "dev": "next dev -p 3000 -H 127.0.0.1",
     "build": "next build",
-    "start": "next start -p 3000 -H 127.0.0.1"
+    "start": "next start -p 3000 -H 127.0.0.1",
+    "inspect:geocode": "tsx src/scripts/inspect-geocode.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

@@ -123,6 +123,39 @@ const CASES: {
     rawAddress: '전남광주통합특별시 서구',
     expectCommuteUsable: true,
   },
+
+  // ── 도 축약형 회귀 ────────────────────────────────────────────────────────
+  // 법정동코드는 '충청남도', Kakao 는 '충남' 을 반환한다. 접미사만 떼면
+  // '충청남' vs '충남' 이라 지역 검증에서 거부되어 시군구 중심점으로 떨어졌다.
+  // 실측에서 충청남·충청북·경상남·경상북 4개 도가 실패의 99.6%를 차지했다.
+  {
+    label: '[축약형] 충청남도 — 도로명주소',
+    name: '지엔하임',
+    rawAddress: '충청남도 당진시 수청2로 77',
+    expectStrategy: 'address',
+    expectCommuteUsable: true,
+  },
+  {
+    label: '[축약형] 경상남도 — 일반구 포함',
+    name: '부산신항8단지부영아파트',
+    rawAddress: '경상남도 창원시 진해구 신항동로 136',
+    expectStrategy: 'address',
+    expectCommuteUsable: true,
+  },
+  {
+    label: '[축약형] 경상북도 — 읍 지역',
+    name: '경주외동사랑으로부영1단지',
+    rawAddress: '경상북도 경주시 산업로 1769',
+    expectStrategy: 'address',
+    expectCommuteUsable: true,
+  },
+  {
+    label: '[축약형] 충청북도 — 군 지역',
+    name: '우미린스테이',
+    rawAddress: '충청북도 진천군 대하로 150',
+    expectStrategy: 'address',
+    expectCommuteUsable: true,
+  },
 ];
 
 async function testResolution(): Promise<void> {
