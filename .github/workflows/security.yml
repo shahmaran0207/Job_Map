@@ -43,12 +43,16 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v4
       - uses: actions/checkout@v7
-      - uses: github/codeql-action/init@v3
+
+      # init 과 analyze 는 반드시 같은 메이저 버전이어야 한다. 섞이면
+      # "Loaded a configuration file for version '3.x', but running version '4.x'"
+      # 로 실패한다. Dependabot 이 v4 스텝을 추가하면서 v3 스텝을 지우지 않아
+      # init 이 두 번 돌던 상태를 정리했다.
+      - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           # 보안 쿼리를 확장 세트로 돌린다 (기본보다 SSRF/인젝션 커버리지가 넓다)
           queries: security-extended
+
       - uses: github/codeql-action/analyze@v4
