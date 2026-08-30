@@ -49,10 +49,29 @@ export async function geocode(rawQuery: string): Promise<GeoResult | null> {
 
   if (!env.kakaoRestKey) return null;
 
+  // 여기서 예외가 나면(쿼터 소진·네트워크 장애) 캐시에 쓰지 않고 그대로 던진다.
+  // 일시적 실패를 '주소 없음'으로 캐시하면 영구 오염이 된다. 아래 주석 참고.
   const hit = (await kakaoAddress(q)) ?? (await kakaoKeyword(q));
   const validated = validate(hit);
   await cachePut(q, validated);
   return validated;
+}
+
+/**
+ * 지오코딩을 일시적으로 수행할 수 없는 상태.
+ *
+ * 쿼터 소진이나 네트워크 장애를 '주소 없음' 과 구별하기 위해 존재한다. 이 둘을
+ * 섞으면 대규모 배치에서 치명적이다. 7만 건을 돌리다 쿼터가 끊기면 남은 전부가
+ * miss 로 **영구 캐시**되고, 재실행해도 캐시가 먼저 걸려 되살릴 수 없다.
+ *
+ * 그래서 이 예외는 캐시하지 않고 위로 던진다. 배치 스크립트는 이걸 받으면
+ * 나머지를 오염시키지 않고 중단해야 한다.
+ */
+export class GeocodeUnavailableError extends Error {
+  constructor(reason: string) {
+    super(`지오코딩을 일시적으로 수행할 수 없습니다: ${reason}`);
+    this.name = 'GeocodeUnavailableError';
+  }
 }
 
 /**
@@ -88,9 +107,18 @@ async function cachePut(q: string, hit: GeoResult | null): Promise<void> {
 
 const KAKAO_HOST = 'dapi.kakao.com';
 
-async function kakaoFetch(path: string, params: Record<string, string>): Promise<any | null> {
+/**
+ * Kakao 호출.
+ *
+ * 성공하면 파싱된 JSON 을 돌려준다. 재시도를 소진하면 **예외를 던진다**.
+ * null 을 돌려주면 호출부가 '주소 없음' 과 구별할 수 없고, 그 결과가 캐시에
+ * 영구 저장되어 되살릴 수 없게 된다.
+ */
+async function kakaoFetch(path: string, params: Record<string, string>): Promise<any> {
   const url = new URL(`https://${KAKAO_HOST}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+  let lastReason = 'unknown';
 
   for (let i = 0; i < 3; i++) {
     try {
@@ -103,18 +131,24 @@ async function kakaoFetch(path: string, params: Record<string, string>): Promise
         timeoutMs: 15_000,
         headers: { Authorization: `KakaoAK ${env.kakaoRestKey}` },
       });
-      if (res.status === 429) {
-        await sleep(2000 * (i + 1)); // 쿼터 초과: 잠시 물러난다
-        continue;
+
+      if (res.status === 200) return stripDangerousKeys(JSON.parse(res.text));
+
+      // 429 = 쿼터/속도 초과, 401·403 = 키 문제. 둘 다 '주소 없음' 이 아니다.
+      lastReason = `HTTP ${res.status}`;
+      if (res.status === 401 || res.status === 403) {
+        throw new GeocodeUnavailableError(`${lastReason} (KAKAO_REST_KEY 확인 필요)`);
       }
-      if (res.status !== 200) return null;
-      return stripDangerousKeys(JSON.parse(res.text));
-    } catch {
+      await sleep(2000 * (i + 1));
+    } catch (e) {
+      if (e instanceof GeocodeUnavailableError) throw e;
       // 에러 본문에 키가 섞일 수 있어 내용을 로그에 남기지 않는다.
+      lastReason = 'network';
       await sleep(500 * (i + 1));
     }
   }
-  return null;
+
+  throw new GeocodeUnavailableError(lastReason);
 }
 
 async function kakaoAddress(q: string): Promise<GeoResult | null> {
