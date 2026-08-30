@@ -197,10 +197,32 @@ function sameSido(a: string | null, b: string | null): boolean {
   return SIDO_ALIAS_GROUPS.some((g) => g.includes(x) && g.includes(y));
 }
 
-/** '서울특별시' / '서울' 을 같게 본다. */
+/**
+ * 도 이름의 축약형. 이걸 놓쳐서 4개 도가 통째로 저품질이 되었다.
+ *
+ * 법정동코드는 '충청남도' 를 쓰고 Kakao 는 '충남' 을 반환한다. 접미사만 떼면
+ * '충청남' vs '충남' 이라 다르다고 판정되어, 주소 질의가 성공했는데도 지역 검증에서
+ * 거부되고 시군구 중심점으로 떨어졌다.
+ *
+ * 서울·경기·인천은 축약형이 정식명과 같아서 멀쩡했고, 정확히 충청남·충청북·
+ * 경상남·경상북 네 도만 실패했다. 실측에서 이 4개 도가 실패 5,188건 중 5,168건
+ * (99.6%)을 차지했다.
+ */
+const SIDO_SHORT_FORMS: Record<string, string> = {
+  충청남: '충남',
+  충청북: '충북',
+  경상남: '경남',
+  경상북: '경북',
+  전라남: '전남',
+  전라북: '전북',
+};
+
+/** '서울특별시' / '서울', '충청남도' / '충남' 을 같게 본다. */
 function shortSido(sido: string | null): string | null {
   if (!sido) return null;
-  return sido.replace(/(특별자치시|특별자치도|특별시|광역시|자치시|자치도|도|시)$/, '') || sido;
+  const stripped =
+    sido.replace(/(특별자치시|특별자치도|특별시|광역시|자치시|자치도|도|시)$/, '') || sido;
+  return SIDO_SHORT_FORMS[stripped] ?? stripped;
 }
 
 /**
