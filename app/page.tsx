@@ -7,6 +7,7 @@ import SearchBar from './components/SearchBar';
 import {
   DEFAULT_FILTERS,
   HOUSING_LABEL_SHORT,
+  TRAVEL_LABEL,
   formatManwon,
   type BuildingPoint,
   type Filters,
@@ -38,7 +39,8 @@ export default function Page() {
     const params = new URLSearchParams({
       lon: String(o.lon),
       lat: String(o.lat),
-      radius: String(f.radius),
+      travel: f.travel,
+      minutes: String(f.minutes),
       mode: f.mode,
       maxDeposit: String(f.maxDeposit),
       maxRent: String(f.maxRent),
@@ -68,6 +70,8 @@ export default function Page() {
   }, [origin, filters, fetchRents]);
 
   const buildings: BuildingPoint[] = data?.buildings ?? [];
+  const area = data?.area ?? null;
+  const degraded = area?.kind === 'radius';
   const summary = useMemo(() => summarize(buildings, filters.mode), [buildings, filters.mode]);
 
   return (
@@ -94,13 +98,34 @@ export default function Page() {
           <div className="rounded-lg bg-indigo-50 px-3 py-2.5 text-[12px] leading-snug text-indigo-900">
             <div className="font-medium">{origin.address ?? '선택한 위치'}</div>
             <div className="mt-0.5 text-indigo-700/70">
-              이 지점에서 반경{' '}
-              {filters.radius >= 1000 ? `${filters.radius / 1000}km` : `${filters.radius}m`}
+              {TRAVEL_LABEL[filters.travel]} {filters.minutes}분 이내
+              {area?.kind === 'isochrone' && ' (실제 이동 경로 기준)'}
             </div>
           </div>
         )}
 
-        <FilterPanel filters={filters} onChange={setFilters} disabled={!origin || loading} />
+        {/*
+          직선거리 폴백을 반드시 알린다. 알리지 않으면 사용자는 실제 통근시간이라고
+          믿는데 지도는 직선거리를 보여주는 셈이 된다. 이 프로젝트에서 가장 피하려는
+          "지도가 조용히 거짓말하는" 상태다.
+        */}
+        {degraded && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-snug text-amber-900">
+            <div className="font-medium">직선거리 근사로 표시 중</div>
+            <div className="mt-0.5 text-amber-800/80">
+              라우팅 엔진이 꺼져 있어 실제 이동 경로 대신 직선거리로 계산했습니다.
+              {area?.radius && ` (반경 약 ${(area.radius / 1000).toFixed(1)}km)`} 지도의
+              경계선이 점선으로 표시됩니다.
+            </div>
+          </div>
+        )}
+
+        <FilterPanel
+          filters={filters}
+          onChange={setFilters}
+          disabled={!origin || loading}
+          degraded={degraded}
+        />
 
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>
@@ -113,8 +138,7 @@ export default function Page() {
           중앙값
           <br />
           <span className="text-neutral-400/80">
-            실거래 기록이며 현재 매물이 아닙니다. 반경은 직선거리이고, 통근시간 기반 검색은 준비
-            중입니다.
+            실거래 기록이며 현재 매물이 아닙니다.
           </span>
         </footer>
       </aside>
@@ -122,7 +146,7 @@ export default function Page() {
       <section className="relative min-h-0 flex-1">
         <RentMap
           origin={origin ? { lon: origin.lon, lat: origin.lat } : null}
-          radius={filters.radius}
+          area={area}
           buildings={buildings}
           mode={filters.mode}
         />

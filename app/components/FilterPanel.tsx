@@ -1,22 +1,31 @@
 'use client';
 
 import type { HousingType } from '../../src/collectors/molit-types';
-import { HOUSING_LABEL_SHORT, formatManwon, type Filters } from '../lib/types';
+import {
+  HOUSING_LABEL_SHORT,
+  MINUTE_OPTIONS,
+  TRAVEL_LABEL,
+  formatManwon,
+  type Filters,
+  type TravelMode,
+} from '../lib/types';
 
 interface Props {
   filters: Filters;
   onChange: (next: Filters) => void;
   disabled: boolean;
+  /** 라우팅 엔진을 못 써서 직선거리로 물러선 상태인지 */
+  degraded: boolean;
 }
 
-const RADIUS_OPTIONS = [500, 1000, 2000, 3000, 5000, 10_000];
+const TRAVEL_MODES: TravelMode[] = ['walk', 'transit', 'drive'];
 const TYPES: HousingType[] = ['apt', 'offi', 'rh', 'sh'];
 
 /** 상한 슬라이더 값. 0 은 '제한 없음'. */
 const DEPOSIT_STEPS = [0, 500, 1000, 2000, 3000, 5000, 10_000, 20_000, 50_000, 100_000];
 const RENT_STEPS = [0, 30, 40, 50, 60, 70, 80, 100, 130, 200, 300];
 
-export default function FilterPanel({ filters, onChange, disabled }: Props) {
+export default function FilterPanel({ filters, onChange, disabled, degraded }: Props) {
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     onChange({ ...filters, [key]: value });
 
@@ -50,21 +59,44 @@ export default function FilterPanel({ filters, onChange, disabled }: Props) {
         </div>
       </Field>
 
-      <Field label="반경" hint="직선거리 (통근시간은 준비 중)">
-        <div className="flex flex-wrap gap-1.5">
-          {RADIUS_OPTIONS.map((r) => (
+      <Field label="이동수단">
+        <div className="flex gap-1 rounded-lg bg-neutral-100 p-1">
+          {TRAVEL_MODES.map((t) => (
             <button
-              key={r}
+              key={t}
               type="button"
               disabled={disabled}
-              onClick={() => set('radius', r)}
+              onClick={() => set('travel', t)}
+              className={`flex-1 rounded-md px-2 py-1.5 font-medium transition ${
+                filters.travel === t
+                  ? 'bg-white text-neutral-900 shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-700'
+              }`}
+            >
+              {TRAVEL_LABEL[t]}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field
+        label="통근 시간"
+        hint={degraded ? '엔진 미가동 — 직선거리 근사' : undefined}
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {MINUTE_OPTIONS.map((m) => (
+            <button
+              key={m}
+              type="button"
+              disabled={disabled}
+              onClick={() => set('minutes', m)}
               className={`rounded-md border px-2.5 py-1 tabular-nums transition ${
-                filters.radius === r
+                filters.minutes === m
                   ? 'border-indigo-500 bg-indigo-50 font-medium text-indigo-700'
                   : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
               }`}
             >
-              {r >= 1000 ? `${r / 1000}km` : `${r}m`}
+              {m}분
             </button>
           ))}
         </div>

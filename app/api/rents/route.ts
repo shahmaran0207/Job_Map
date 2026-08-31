@@ -1,31 +1,39 @@
 import { NextResponse } from 'next/server';
 import { query } from '../../../src/lib/db';
 import { snapToCell } from '../../../src/lib/grid';
+import { RoutingUnavailableError, getIsochrone } from '../../../src/lib/isochrone';
 import { clientKey, rateLimit } from '../../../src/lib/rate-limit';
+import { assertAllowedMinutes, type TravelMode } from '../../../src/lib/routing';
 import { assertKoreanCoord } from '../../../src/lib/security';
 import { HOUSING_TYPES, type HousingType } from '../../../src/collectors/molit-types';
 
 /**
- * 직장 좌표 기준 반경 내 거주지 시세.
+ * 직장 좌표 기준 통근권 내 거주지 시세.
  *
- * 지금은 **직선 반경**이다. 라우팅 엔진이 붙으면 이 자리를 등시선 폴리곤
- * (`ST_Contains`)으로 교체한다. 쿼리 구조는 그대로 두고 조건만 바뀌도록 짰다.
+ * 통근권은 **등시선**(N분 안에 실제로 닿는 영역)이다. 라우팅 엔진이 꺼져 있으면
+ * 직선 반경으로 물러서되, 그 사실을 응답에 명시한다. 엔진은 개발 PC Docker 위에
+ * 있어 꺼져 있는 것이 정상적인 상태 중 하나이고, 사용자에게 "직선거리다" 라고
+ * 말하지 않으면 지도가 조용히 거짓말을 하게 된다.
  *
  * 사용자 좌표는 격자로 스냅한 뒤에만 쓴다. 직장 주소는 개인을 특정할 수 있는
  * 정보이고, 정확한 좌표를 로그·캐시에 남기지 않는 것이 이 프로젝트의 원칙이다.
- * 250m 격자는 통근 계산 정확도에 영향이 거의 없다.
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** 허용 반경(m). 임의 값을 받으면 전국 스캔으로 DB를 태울 수 있다. */
+/** 엔진이 없을 때 쓰는 직선 반경(m). 임의 값을 받으면 전국 스캔으로 DB를 태울 수 있다. */
 const ALLOWED_RADIUS = [500, 1000, 2000, 3000, 5000, 10_000] as const;
 
-/** 시세 신뢰도를 위해 최근 N개월 거래만 본다. */
-const MONTHS_WINDOW = 12;
+/** 등시선을 못 쓸 때 통근 시간을 대략의 반경으로 환산한다. 이동수단별 평균 속도 기준. */
+const FALLBACK_SPEED_M_PER_MIN: Record<TravelMode, number> = {
+  walk: 67, // 4km/h
+  transit: 250, // 15km/h (대기·환승 포함 실효 속도)
+  drive: 400, // 24km/h (도심 평균)
+};
 
-/** 응답 상한. 지도에 그릴 수 있는 양을 넘기면 브라우저가 죽는다. */
+const MONTHS_WINDOW = 12;
 const MAX_RESULTS = 3000;
+const CELL_SIZE = 500;
 
 type Mode = 'wolse' | 'jeonse';
 
@@ -47,10 +55,27 @@ interface Row {
   latest_ym: string | null;
 }
 
-function parseIntParam(v: string | null, fallback: number, min: number, max: number): number {
+function intParam(v: string | null, fallback: number, min: number, max: number): number {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+function isTravelMode(v: string): v is TravelMode {
+  return v === 'walk' || v === 'transit' || v === 'drive';
+}
+
+/** 반경 원을 폴리곤 GeoJSON 으로. 위도에 따른 경도 축소를 반영한다. */
+function circleGeoJson(lon: number, lat: number, radiusM: number): object {
+  const steps = 64;
+  const dLat = radiusM / 111_320;
+  const dLon = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * 2 * Math.PI;
+    ring.push([lon + dLon * Math.cos(a), lat + dLat * Math.sin(a)]);
+  }
+  return { type: 'Polygon', coordinates: [ring] };
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -72,44 +97,75 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'invalid_coord' }, { status: 400 });
   }
 
-  // 사용자 좌표를 격자로 스냅한다. 이후 로직은 격자 중심만 사용한다.
-  const cell = snapToCell(lon, lat, 250);
+  const travelRaw = p.get('travel') ?? 'transit';
+  const travel: TravelMode = isTravelMode(travelRaw) ? travelRaw : 'transit';
 
-  const radiusRaw = Number(p.get('radius'));
-  const radius = ALLOWED_RADIUS.find((r) => r === radiusRaw) ?? 2000;
+  let minutes: number;
+  try {
+    minutes = assertAllowedMinutes(Number(p.get('minutes') ?? 30));
+  } catch {
+    return NextResponse.json({ error: 'invalid_minutes' }, { status: 400 });
+  }
 
   const mode: Mode = p.get('mode') === 'jeonse' ? 'jeonse' : 'wolse';
-
-  // 상한은 만원 단위로 받는다(UI 표기와 일치). 0 이하는 '제한 없음'.
-  const maxDepositManwon = parseIntParam(p.get('maxDeposit'), 0, 0, 2_000_000);
-  const maxRentManwon = parseIntParam(p.get('maxRent'), 0, 0, 100_000);
-  const minArea = parseIntParam(p.get('minArea'), 0, 0, 1000);
+  const maxDepositManwon = intParam(p.get('maxDeposit'), 0, 0, 2_000_000);
+  const maxRentManwon = intParam(p.get('maxRent'), 0, 0, 100_000);
+  const minArea = intParam(p.get('minArea'), 0, 0, 1000);
 
   const typesRaw = (p.get('types') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const types = typesRaw.filter((t): t is HousingType =>
-    (HOUSING_TYPES as string[]).includes(t),
-  );
+  const types = typesRaw.filter((t): t is HousingType => (HOUSING_TYPES as string[]).includes(t));
   const typeFilter = types.length > 0 ? types : HOUSING_TYPES;
-
-  // 통근 계산 불가 건물(단독다가구 등)을 포함할지. 기본은 포함하되 구분해 표시한다.
   const includeUnreliable = p.get('unreliable') !== '0';
 
-  const sinceYm = monthsAgo(MONTHS_WINDOW);
+  // ── 통근권 영역 결정 ──────────────────────────────────────────────────────
+  const cell = snapToCell(lon, lat, CELL_SIZE);
+  let areaGeoJson: object;
+  let area: Record<string, unknown>;
+
+  try {
+    const iso = await getIsochrone(lon, lat, travel, minutes);
+    areaGeoJson = iso.polygon;
+    area = {
+      kind: 'isochrone',
+      travel,
+      minutes,
+      source: iso.source, // 'cache' 면 엔진을 건드리지 않았다
+    };
+  } catch (e) {
+    if (!(e instanceof RoutingUnavailableError)) throw e;
+
+    // 엔진이 꺼져 있다. 직선 반경으로 물러서되 사실대로 알린다.
+    const explicit = ALLOWED_RADIUS.find((r) => r === Number(p.get('radius')));
+    const radius = explicit ?? Math.round(minutes * FALLBACK_SPEED_M_PER_MIN[travel]);
+    const clamped = Math.min(20_000, Math.max(300, radius));
+    areaGeoJson = circleGeoJson(cell.lon, cell.lat, clamped);
+    area = {
+      kind: 'radius',
+      travel,
+      minutes,
+      radius: clamped,
+      // 클라이언트가 "직선거리 근사" 라고 표시하는 근거.
+      degraded: 'routing_engine_unavailable',
+    };
+  }
 
   try {
     const rows = await query<Row>(
       `WITH origin AS (
          SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS g
        ),
+       area AS (
+         SELECT ST_SetSRID(ST_GeomFromGeoJSON($3), 4326)::geography AS g
+       ),
        nearby AS (
-         -- 공간 인덱스(GiST)를 쓰는 조건. 라우팅 엔진이 붙으면 이 부분을
-         -- 등시선 폴리곤 포함 조건으로 교체한다.
+         -- 등시선 폴리곤 안의 건물. 점 대 폴리곤이므로 ST_Intersects 가
+         -- GiST 인덱스를 그대로 쓴다.
          SELECT b.id, b.name, b.housing_type, b.legal_dong, b.built_year,
                 b.commute_usable, b.geo_precision, b.geom,
                 ST_Distance(b.geom, o.g) AS dist_m
-           FROM building b, origin o
+           FROM building b, area a, origin o
           WHERE b.geom IS NOT NULL
-            AND ST_DWithin(b.geom, o.g, $3)
+            AND ST_Intersects(b.geom, a.g)
             AND b.housing_type = ANY($4::text[])
             AND ($5::boolean OR b.commute_usable)
        )
@@ -136,8 +192,9 @@ export async function GET(req: Request): Promise<NextResponse> {
         ORDER BY n.dist_m
         LIMIT $11`,
       [
-        cell.lon, cell.lat, radius, typeFilter, includeUnreliable,
-        sinceYm, mode,
+        cell.lon, cell.lat, JSON.stringify(areaGeoJson),
+        typeFilter, includeUnreliable,
+        monthsAgo(MONTHS_WINDOW), mode,
         maxDepositManwon * 10_000, maxRentManwon * 10_000, minArea,
         MAX_RESULTS,
       ],
@@ -146,9 +203,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json(
       {
         origin: { lon: cell.lon, lat: cell.lat },
-        radius,
+        area: { ...area, geojson: areaGeoJson },
         mode,
-        window: { sinceYm, months: MONTHS_WINDOW },
+        window: { sinceYm: monthsAgo(MONTHS_WINDOW), months: MONTHS_WINDOW },
         truncated: rows.length >= MAX_RESULTS,
         count: rows.length,
         buildings: rows.map((r) => ({
