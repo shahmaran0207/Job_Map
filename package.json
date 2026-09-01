@@ -31,9 +31,10 @@
     "inspect:geocode": "tsx src/scripts/inspect-geocode.ts",
     "routing:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d",
     "routing:up:transit": "docker compose --env-file .env -f docker/docker-compose.yml --profile transit up -d",
-    "routing:down": "docker compose -f docker/docker-compose.yml down",
-    "routing:logs": "docker compose -f docker/docker-compose.yml logs -f --tail=50",
-    "routing:check": "tsx src/scripts/check-routing.ts"
+    "routing:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
+    "routing:logs": "docker compose --env-file .env -f docker/docker-compose.yml logs -f --tail=50",
+    "routing:check": "tsx src/scripts/check-routing.ts",
+    "routing:ps": "docker compose --env-file .env -f docker/docker-compose.yml ps"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
