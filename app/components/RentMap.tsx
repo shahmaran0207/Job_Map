@@ -9,8 +9,8 @@ import {
   type GeoJSONSource,
   type MapLayerMouseEvent,
 } from 'maplibre-gl';
-import type { Point, Polygon } from 'geojson';
-import type { BuildingPoint } from '../lib/types';
+import type { Point } from 'geojson';
+import type { AreaInfo, BuildingPoint } from '../lib/types';
 import { HOUSING_LABEL_SHORT, formatManwon, toPyeong } from '../lib/types';
 
 /**
@@ -31,7 +31,8 @@ const ORIGIN_SOURCE = 'origin';
 
 interface Props {
   origin: { lon: number; lat: number } | null;
-  radius: number;
+  /** 검색에 사용된 통근권. 등시선이거나(정상) 직선 반경이다(엔진 미가동). */
+  area: AreaInfo | null;
   buildings: BuildingPoint[];
   mode: 'wolse' | 'jeonse';
 }
@@ -42,7 +43,7 @@ const BREAKS = {
   jeonse: [10_000, 20_000, 35_000, 60_000],
 } as const;
 
-export default function RentMap({ origin, radius, buildings, mode }: Props) {
+export default function RentMap({ origin, area, buildings, mode }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
@@ -77,27 +78,28 @@ export default function RentMap({ origin, radius, buildings, mode }: Props) {
         data: { type: 'FeatureCollection', features: [] },
       });
 
-      // 검색 반경. 지금은 직선 반경이며 라우팅 엔진이 붙으면 등시선으로 교체된다.
+      // 통근권 영역. 등시선이면 실선, 직선 반경 폴백이면 점선으로 구분한다.
+      // 사용자가 "이건 실제 통근시간이 아니라 근사" 임을 화면에서 알아야 한다.
       map.addLayer({
-        id: 'origin-radius',
+        id: 'area-fill',
         type: 'fill',
         source: ORIGIN_SOURCE,
-        filter: ['==', ['geometry-type'], 'Polygon'],
+        filter: ['!=', ['geometry-type'], 'Point'],
         paint: {
           'fill-color': 'oklch(0.55 0.18 265)',
-          'fill-opacity': 0.07,
+          'fill-opacity': ['case', ['get', 'degraded'], 0.05, 0.09],
         },
       });
       map.addLayer({
-        id: 'origin-radius-line',
+        id: 'area-line',
         type: 'line',
         source: ORIGIN_SOURCE,
-        filter: ['==', ['geometry-type'], 'Polygon'],
+        filter: ['!=', ['geometry-type'], 'Point'],
         paint: {
           'line-color': 'oklch(0.55 0.18 265)',
-          'line-width': 1.5,
-          'line-dasharray': [3, 2],
-          'line-opacity': 0.5,
+          'line-width': ['case', ['get', 'degraded'], 1.5, 2],
+          'line-dasharray': ['case', ['get', 'degraded'], ['literal', [3, 2]], ['literal', [1, 0]]],
+          'line-opacity': ['case', ['get', 'degraded'], 0.5, 0.75],
         },
       });
 
@@ -200,43 +202,37 @@ export default function RentMap({ origin, radius, buildings, mode }: Props) {
 
       const originSrc = map.getSource(ORIGIN_SOURCE) as GeoJSONSource | undefined;
       if (originSrc) {
-        originSrc.setData({
-          type: 'FeatureCollection',
-          features: origin
-            ? [
-                {
-                  type: 'Feature',
-                  geometry: { type: 'Point', coordinates: [origin.lon, origin.lat] },
-                  properties: {},
-                },
-                {
-                  type: 'Feature',
-                  geometry: circlePolygon(origin.lon, origin.lat, radius),
-                  properties: {},
-                },
-              ]
-            : [],
-        });
+        const features: GeoJSON.Feature[] = [];
+        if (area) {
+          features.push({
+            type: 'Feature',
+            geometry: area.geojson,
+            properties: { degraded: area.kind === 'radius' },
+          });
+        }
+        if (origin) {
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [origin.lon, origin.lat] },
+            properties: {},
+          });
+        }
+        originSrc.setData({ type: 'FeatureCollection', features });
       }
     };
 
     if (readyRef.current) apply();
     else map.once('load', apply);
-  }, [buildings, origin, radius, mode]);
+  }, [buildings, origin, area, mode]);
 
-  // 검색 위치가 바뀌면 그 반경이 화면에 들어오게 한다.
+  // 통근권이 바뀌면 그 영역이 화면에 들어오게 한다.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !origin) return;
-    const deg = radius / 111_000;
-    map.fitBounds(
-      [
-        [origin.lon - deg * 1.4, origin.lat - deg],
-        [origin.lon + deg * 1.4, origin.lat + deg],
-      ],
-      { padding: 48, duration: 700 },
-    );
-  }, [origin, radius]);
+    if (!map || !area) return;
+    const b = boundsOf(area.geojson);
+    if (!b) return;
+    map.fitBounds(b, { padding: 56, duration: 700, maxZoom: 15 });
+  }, [area]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
@@ -256,17 +252,35 @@ function colorFor(value: number | null, mode: 'wolse' | 'jeonse'): string {
   return palette[i]!;
 }
 
-/** 반경 원을 폴리곤으로. 위도에 따른 경도 축소를 반영한다. */
-function circlePolygon(lon: number, lat: number, radiusM: number): Polygon {
-  const steps = 72;
-  const dLat = radiusM / 111_320;
-  const dLon = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
-  const ring: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const a = (i / steps) * 2 * Math.PI;
-    ring.push([lon + dLon * Math.cos(a), lat + dLat * Math.sin(a)]);
+/**
+ * 폴리곤의 경계 상자.
+ *
+ * 등시선은 원이 아니라 도로망을 따라 불규칙하게 뻗은 모양이라 반경으로는
+ * 화면을 맞출 수 없다. 좌표를 직접 훑는다.
+ */
+function boundsOf(
+  g: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): [[number, number], [number, number]] | null {
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+
+  const rings = g.type === 'Polygon' ? g.coordinates : g.coordinates.flat();
+  for (const ring of rings) {
+    for (const [lon, lat] of ring as [number, number][]) {
+      if (lon < minLon) minLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lon > maxLon) maxLon = lon;
+      if (lat > maxLat) maxLat = lat;
+    }
   }
-  return { type: 'Polygon', coordinates: [ring] };
+
+  if (!Number.isFinite(minLon)) return null;
+  return [
+    [minLon, minLat],
+    [maxLon, maxLat],
+  ];
 }
 
 function esc(s: unknown): string {

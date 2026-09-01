@@ -31,11 +31,16 @@ server {
         return 401;
     }
 
-    # 에러 응답에 내부 정보를 담지 않는다.
-    proxy_intercept_errors on;
-    error_page 500 502 503 504 = @engine_error;
+    # Docker 내장 DNS. proxy_pass 에 변수를 쓰면 nginx 가 기동 시점이 아니라
+    # 요청 시점에 이름을 푼다. 그래야 엔진 하나(예: OTP2)가 떠 있지 않아도
+    # 프록시가 정상 기동한다. 호스트명을 직접 쓰면 기동 자체가 실패한다.
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
-    location @engine_error {
+    # 엔진이 없을 때의 응답을 통일한다. 앱은 이걸 받으면 직선거리로 폴백한다.
+    proxy_intercept_errors on;
+    error_page 502 503 504 = @engine_down;
+
+    location @engine_down {
         default_type application/json;
         return 502 '{"error":"routing_unavailable"}';
     }
@@ -43,33 +48,38 @@ server {
     # ── Valhalla: 도보 / 자차 ────────────────────────────────────────────────
     # 경로 allowlist. /status 같은 정보 노출 엔드포인트는 통과시키지 않는다.
     location = /valhalla/isochrone {
-        proxy_pass http://valhalla:8002/isochrone;
+        set $valhalla http://valhalla:8002;
+        proxy_pass $valhalla/isochrone;
         include /etc/nginx/snippets/proxy_common.inc;
     }
 
     location = /valhalla/route {
-        proxy_pass http://valhalla:8002/route;
+        set $valhalla http://valhalla:8002;
+        proxy_pass $valhalla/route;
         include /etc/nginx/snippets/proxy_common.inc;
     }
 
     location = /valhalla/sources_to_targets {
-        proxy_pass http://valhalla:8002/sources_to_targets;
+        set $valhalla http://valhalla:8002;
+        proxy_pass $valhalla/sources_to_targets;
         include /etc/nginx/snippets/proxy_common.inc;
     }
 
     # ── OTP2: 대중교통 ──────────────────────────────────────────────────────
     location = /otp/graphql {
-        proxy_pass http://otp:8080/otp/routers/default/index/graphql;
+        set $otp http://otp:8080;
+        proxy_pass $otp/otp/routers/default/index/graphql;
         include /etc/nginx/snippets/proxy_common.inc;
     }
 
     location = /otp/isochrone {
-        proxy_pass http://otp:8080/otp/traveltime/isochrone;
+        set $otp http://otp:8080;
+        proxy_pass $otp/otp/traveltime/isochrone;
         include /etc/nginx/snippets/proxy_common.inc;
     }
 
-    # 헬스체크만 토큰 없이 열어둘 필요가 있다면 위 if 블록보다 앞에 별도 server 를 두어야 한다.
-    # 지금은 의도적으로 모든 경로에 인증을 요구한다.
+    # 헬스체크도 토큰을 요구한다. 엔진 가동 여부 자체가 정찰 정보이므로
+    # 의도적으로 모든 경로에 인증을 건다.
 
     # allowlist 에 없는 경로는 전부 차단.
     location / {

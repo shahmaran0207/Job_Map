@@ -6,9 +6,19 @@
 
 ---
 
-## 0. 다음에 할 것 — 라우팅 엔진
+## 0. 다음에 할 것 — 라우팅 엔진 기동
 
-**막혀 있는 것은 없다.** 데이터·좌표·지도가 모두 동작한다. 다음 작업은 4번(라우팅 엔진)이며, 브랜치 `feat/routing-engine` 을 미리 만들어 뒀다.
+**코드는 다 됐다. 엔진만 띄우면 된다.**
+
+```bash
+# 1. Docker Desktop 실행
+# 2. 엔진 기동 (첫 기동은 OSM 다운로드 + 타일 빌드로 15~40분)
+npm run routing:up
+npm run routing:logs     # 진행 상황
+npm run routing:check    # 진단 — 무엇이 왜 안 되는지 알려준다
+```
+
+빌드가 끝나면 지도가 자동으로 등시선으로 전환된다. 그전까지는 직선거리 근사로 동작하며 화면에 배너가 뜬다. 상세는 4번과 [docker/README.md](./docker/README.md).
 
 현재 상태 (2026-08-30):
 
@@ -16,10 +26,8 @@
 건물 73,062 (좌표 100%)   거래 396,262   시군구 256/269   기간 202606~202608
 통근 계산 가능: 건물 94.6% / 거래 75.5%
 남은 24.5%는 전부 단독·다가구 (정부가 지번을 공개하지 않는 구조적 한계)
-지도: npm run dev → http://127.0.0.1:3000  (직선 반경으로 동작)
+지도: npm run dev → http://127.0.0.1:3000
 ```
-
-**핵심 작업:** `app/api/rents/route.ts` 의 `ST_DWithin`(직선 반경)을 등시선 폴리곤 `ST_Contains` 로 교체한다. 조건만 바뀌도록 쿼리 구조를 잡아뒀다. 상세는 4번.
 
 시작 전 `npm run stats:rent` 로 현재 수치를 확인할 것. 위 숫자는 그 시점 기준이다.
 
@@ -216,15 +224,28 @@ API 호출 4회 → 거래 1,343건 / 건물 564건
 - Kakao Local API 쿼터 10만/일. 전국 건물 수가 많으므로 캐시 적중률이 중요하다. 같은 건물은 지오코딩 캐시에서 재사용된다
 - `region_code.priority` 를 관측 거래량으로 갱신해 수집·지오코딩 우선순위를 자동 조정
 
-## 4. 라우팅 엔진
+## 4. 라우팅 엔진 — 코드 완료, 엔진 기동 대기 (2026-08-30)
 
-- `docker/docker-compose.yml` 로 Valhalla + OTP2 + nginx 인증 프록시 기동 (Docker Desktop 필요)
-- OSM 한국 추출본 → `data/osm/`, 국토부 표준 GTFS → `data/otp/`
-- 등시선 API + `isochrone_cache` 연결. `src/lib/routing.ts` 는 이미 준비됨
+앱 쪽은 전부 붙었다. `npm run routing:up` 으로 엔진만 띄우면 등시선으로 전환된다.
+
+**구현됨**
+- `src/lib/isochrone.ts` — 캐시(`isochrone_cache`) + 실패 처리. 500m 격자 키로 영구 저장하므로 같은 동네 두 번째 사용자부터 엔진을 호출하지 않고, 엔진이 꺼져 있어도 캐시된 지역은 서비스된다
+- `app/api/rents` — `ST_DWithin`(직선) → `ST_Intersects`(등시선 폴리곤). 점 대 폴리곤이라 GiST 인덱스를 그대로 쓴다
+- UI — 반경 대신 **이동수단(도보/대중교통/자차) + 통근 시간** 필터
+- `docker/` — Valhalla + nginx 인증 프록시. compose 가 루트 `.env` 의 `ROUTING_TOKEN` 을 읽으므로 값을 두 곳에 맞출 필요가 없다
+- `npm run routing:check` — 진단
+
+**우아한 폴백**
+
+엔진은 개발 PC Docker 위에 있어 **꺼져 있는 것이 정상적인 상태 중 하나**다. 그래서 500 을 던지지 않고 직선 반경으로 물러서되, 응답의 `area.kind='radius'` + `degraded` 로 알리고 화면에 경고 배너와 점선 경계를 띄운다. 알리지 않으면 사용자는 실제 통근시간이라 믿는데 지도는 직선거리를 보여주게 된다.
+
+폴백 반경은 이동수단별 실효 속도 환산(도보 4km/h, 대중교통 15km/h, 자차 24km/h). 실측: 대중교통 30분 → 7.5km.
+
+**남은 것**
+- Docker Desktop 실행 후 `npm run routing:up`. 첫 기동은 한국 OSM(약 300MB) 다운로드 + 타일 빌드로 15~40분 걸린다
+- **대중교통(OTP2)은 GTFS 확보가 선행되어야 한다.** 국토부 표준 GTFS 는 국가대중교통정보센터(TAGO) 등록이 필요해 즉시 받을 수 없다. `transit` 프로필로 분리해 두었고, 그 전까지 대중교통 모드는 직선거리 근사로 동작한다
 - 전국 주차장 표준데이터 적재 → 자차 2구간 경로(운전 + 주차장에서 도보)
-- `ROUTING_TOKEN` 생성: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-
-> 이 프로젝트에서 유일하게 무료 티어에 안 들어가는 부분이다. 전국 OTP2 는 램 8~16GB 를 요구한다. 초기에는 개발 PC Docker + Cloudflare Tunnel, 상시 운영 시 Oracle Cloud Always Free(ARM 4코어/24GB).
+- 상세는 [docker/README.md](./docker/README.md)
 
 ## 5. 지도 — 1단계 완료 (2026-08-29)
 
