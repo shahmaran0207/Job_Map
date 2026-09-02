@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "dotenv": "^17.4.2",
-    "fast-xml-parser": "^5.11.0",
+    "fast-xml-parser": "^5.11.1",
     "maplibre-gl": "^6.6.0",
     "next": "^15.5.24",
     "pg": "^8.13.1",
@@ -48,14 +48,14 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "postcss": "^8.5.26",
     "shadcn": "^4.19.0",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.19.2",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3"
   },
   "overrides": {
