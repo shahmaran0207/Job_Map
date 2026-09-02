@@ -23,7 +23,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
-      WORKNET_API_KEY: ${{ secrets.WORKNET_API_KEY }}
+      MOLIT_API_KEY: ${{ secrets.MOLIT_API_KEY }}
       KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
       TZ: Asia/Seoul
     steps:
@@ -40,13 +40,13 @@ jobs:
       - name: 스키마 최신화
         run: npm run migrate
 
-      - name: 공고 수집
-        run: npm run collect
+      - name: 실거래가 수집
+        run: npm run collect:rent
 
-      - name: 근무지 지오코딩
-        run: npm run geocode
-        continue-on-error: true # 쿼터 소진이 수집 성공을 무효화하지 않도록
+      - name: 건물 지오코딩
+        run: npm run geocode:buildings
+        continue-on-error: true
 
       - name: 데이터 상태 점검
         if: always()
-        run: npm run stats
+        run: npm run stats:rent
