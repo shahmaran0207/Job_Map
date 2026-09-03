@@ -212,7 +212,8 @@ npm run geocode -- --improve   # 통근 계산 불가 근무지만 재시도 (�
 npm run stats             # 데이터 규모 / 좌표 품질 / 시계열 결측일 점검
 
 npm run dev               # 지도 UI (http://127.0.0.1:3000)
-npm run build && npm start
+npm start                 # 위와 동일 (dev 서버)
+npm run build && npm run start:prod   # 프로덕션 빌드로 실행
 
 npm run test:parse        # 응답 파싱 회귀 테스트 (네트워크·DB 불필요)
 npm run test:molit        # 실거래가 파싱·금액 단위 회귀 테스트
