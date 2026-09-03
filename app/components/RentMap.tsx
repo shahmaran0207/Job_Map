@@ -12,6 +12,7 @@ import {
 import type { Point } from 'geojson';
 import type { AreaInfo, BuildingPoint } from '../lib/types';
 import { HOUSING_LABEL_SHORT, formatManwon, toPyeong } from '../lib/types';
+import { buildListingLinks } from '../../src/lib/listing-links';
 
 /**
  * 시세 지도.
@@ -47,6 +48,9 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
+  // 클릭 핸들러는 지도 생성 시 한 번만 등록되므로, 최신 mode 값을 읽으려면 ref 가 필요하다.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   // 지도 인스턴스는 한 번만 만든다. 필터가 바뀔 때마다 재생성하면 깜빡인다.
   useEffect(() => {
@@ -166,7 +170,7 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
           if (!f) return;
           popup
             .setLngLat((f.geometry as Point).coordinates as [number, number])
-            .setHTML(popupHtml(f.properties as Record<string, unknown>))
+            .setHTML(popupHtml(f.properties as Record<string, unknown>, modeRef.current))
             .addTo(map);
         });
       }
@@ -291,7 +295,7 @@ function esc(s: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
-function popupHtml(p: Record<string, unknown>): string {
+function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string {
   const type = HOUSING_LABEL_SHORT[p.type as keyof typeof HOUSING_LABEL_SHORT] ?? String(p.type);
   const name = p.name ? esc(p.name) : `${esc(p.dong)} ${type}`;
   const deposit = formatManwon(p.deposit as number | null);
@@ -307,6 +311,30 @@ function popupHtml(p: Record<string, unknown>): string {
          정확한 위치가 공개되지 않는 유형입니다. <b>${esc(p.dong)} 일대</b>의 시세로 보세요.
        </div>`;
 
+  // 실거래가는 과거 거래 기록이지 지금 나와 있는 매물이 아니다. 지역·건물을
+  // 좁혀준 뒤 실제 매물 검색은 부동산 서비스로 넘긴다.
+  const links = buildListingLinks({
+    name: p.name as string | null,
+    sido: p.sido as string | null,
+    sigungu: p.sigungu as string | null,
+    legalDong: p.dong as string | null,
+    housingType: p.type as BuildingPoint['type'],
+    mode,
+  });
+  const linkButtons = links.length
+    ? `<div class="mt-2 flex flex-wrap gap-1 border-t border-neutral-100 pt-1.5">
+         ${links
+           .map(
+             (l) =>
+               `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
+                   class="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-200">
+                  ${esc(l.label)}
+                </a>`,
+           )
+           .join('')}
+       </div>`
+    : '';
+
   return `
     <div class="min-w-44">
       <div class="text-[13px] font-semibold leading-tight">${name}</div>
@@ -319,5 +347,6 @@ function popupHtml(p: Record<string, unknown>): string {
         ${p.builtYear ? ` · ${esc(p.builtYear)}년` : ''}
       </div>
       ${warn}
+      ${linkButtons}
     </div>`;
 }

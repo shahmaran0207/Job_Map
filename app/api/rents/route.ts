@@ -41,6 +41,8 @@ interface Row {
   id: string;
   name: string | null;
   housing_type: HousingType;
+  sido: string | null;
+  sigungu: string | null;
   legal_dong: string | null;
   lon: number;
   lat: number;
@@ -162,15 +164,17 @@ export async function GET(req: Request): Promise<NextResponse> {
          -- GiST 인덱스를 그대로 쓴다.
          SELECT b.id, b.name, b.housing_type, b.legal_dong, b.built_year,
                 b.commute_usable, b.geo_precision, b.geom,
+                r.sido, r.sigungu,
                 ST_Distance(b.geom, o.g) AS dist_m
-           FROM building b, area a, origin o
+           FROM building b, area a, origin o, region_code r
           WHERE b.geom IS NOT NULL
+            AND r.code = b.region_code
             AND ST_Intersects(b.geom, a.g)
             AND b.housing_type = ANY($4::text[])
             AND ($5::boolean OR b.commute_usable)
        )
        SELECT n.id, n.name, n.housing_type, n.legal_dong, n.built_year,
-              n.commute_usable, n.geo_precision,
+              n.commute_usable, n.geo_precision, n.sido, n.sigungu,
               ST_X(n.geom::geometry) AS lon,
               ST_Y(n.geom::geometry) AS lat,
               round(n.dist_m)                                    AS dist_m,
@@ -188,7 +192,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           AND ($9::bigint = 0 OR d.monthly_rent <= $9)
           AND ($10::numeric = 0 OR d.area >= $10)
         GROUP BY n.id, n.name, n.housing_type, n.legal_dong, n.built_year,
-                 n.commute_usable, n.geo_precision, n.geom, n.dist_m
+                 n.commute_usable, n.geo_precision, n.sido, n.sigungu, n.geom, n.dist_m
         ORDER BY n.dist_m
         LIMIT $11`,
       [
@@ -212,6 +216,8 @@ export async function GET(req: Request): Promise<NextResponse> {
           id: Number(r.id),
           name: r.name,
           type: r.housing_type,
+          sido: r.sido,
+          sigungu: r.sigungu,
           dong: r.legal_dong,
           lon: r.lon,
           lat: r.lat,
