@@ -216,3 +216,28 @@ Kakao 반환: "충남"                        → "충남"
 - 실거래 레코드에 고유 ID 가 없고 동/호 정보도 없어, 모든 조건이 같은 두 계약은 **원리적으로 구별 불가**다. 재수집 중복을 막기 위해 동일 거래로 취급하며 실측에서 1.5%가 합쳐졌다. 시세 중앙값에는 영향이 거의 없다
 - 단독/다가구(거래 기준 16%)는 건물 단위 좌표를 얻을 수 없다
 - 라우팅 엔진은 이 프로젝트에서 유일하게 무료 티어에 들어가지 않는다
+
+---
+
+## 2026-09-02 — 크론 정비, 브랜치 정리
+
+### collect.yml 실거래가 수집으로 교체
+
+`collect.yml` 이 워크넷(채용) 기준으로 작성된 채로 남아 있었다. GitHub Actions 크론이 매일 2회 돌면서 실거래가가 아니라 채용 수집을 시도하고 있었던 상태.
+
+변경 내용:
+- 환경변수 `WORKNET_API_KEY` → `MOLIT_API_KEY`
+- `npm run collect` → `npm run collect:rent`
+- `npm run geocode` → `npm run geocode:buildings`
+- `npm run stats` → `npm run stats:rent`
+
+GitHub 저장소 Secrets에 `MOLIT_API_KEY` 등록 후 main에 머지.
+
+### 원격 브랜치 정리
+
+Dependabot이 자동으로 만든 브랜치 3개 삭제:
+- `dependabot/npm_and_yarn/minor-and-patch-998a03b8f6`
+- `dependabot/npm_and_yarn/next-16.3.3` — next@16은 아직 검토 전
+- `dependabot/npm_and_yarn/typescript-7.0.2` — TS7은 next build 깨진 전례로 거절
+
+`feat/listing-deeplinks` 는 딥링크 UI 작업용으로 남겨둠. `src/lib/listing-links.ts` 구현은 완료됐고 지도 팝업 연결만 남은 상태.
