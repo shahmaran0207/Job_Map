@@ -5,32 +5,9 @@ import type { NextConfig } from 'next';
  *
  * SECURITY.md 9장의 프론트엔드 항목을 여기서 실제로 적용한다.
  *
- * CSP 에서 허용하는 외부 출처는 지도 타일 하나뿐이다. Kakao Local API 는
- * 브라우저에서 직접 호출하지 않고 서버 라우트(/api/geocode)를 경유하므로
- * connect-src 에 넣지 않는다. REST 키가 클라이언트로 나가지 않게 하는 것이
- * 이 구조의 목적이다.
+ * CSP는 요청마다 nonce가 바뀌어야 해서 여기(정적 config)가 아니라
+ * `middleware.ts`에서 만든다. 이유는 그쪽 주석 참고.
  */
-const TILE_ORIGIN = 'https://tiles.openfreemap.org';
-
-const csp = [
-  "default-src 'self'",
-  // MapLibre 는 WebWorker 를 blob 으로 만든다. wasm-unsafe-eval 은 지도 렌더링에 필요.
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "worker-src 'self' blob:",
-  "child-src 'self' blob:",
-  // Tailwind 가 주입하는 스타일 때문에 인라인 스타일은 허용한다.
-  // script 쪽은 unsafe-inline 을 절대 허용하지 않는다.
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: ${TILE_ORIGIN}`,
-  `connect-src 'self' ${TILE_ORIGIN}`,
-  "font-src 'self' data:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  'upgrade-insecure-requests',
-].join('; ');
-
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // 프로덕션에 소스맵을 배포하지 않는다.
@@ -42,7 +19,6 @@ const nextConfig: NextConfig = {
       {
         source: '/:path*',
         headers: [
-          { key: 'Content-Security-Policy', value: csp },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'no-referrer' },

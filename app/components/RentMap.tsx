@@ -6,6 +6,7 @@ import {
   NavigationControl,
   Popup,
   ScaleControl,
+  setWorkerUrl,
   type GeoJSONSource,
   type MapLayerMouseEvent,
 } from 'maplibre-gl';
@@ -28,6 +29,12 @@ import { HOUSING_LABEL_SHORT, formatManwon, toPyeong } from '../lib/types';
 const TILE_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const SOURCE_ID = 'buildings';
 const ORIGIN_SOURCE = 'origin';
+
+// MapLibre는 워커 스크립트 위치를 import.meta.url로 자동 계산하는데, webpack
+// 번들 안에서는 그 값이 실제 URL이 아니라서 워커가 빈 URL로 뜬다 — 결국 현재
+// 페이지 HTML을 모듈 스크립트로 읽으려다 죽는다(콘솔의 "non-JavaScript MIME
+// type of text/html" 에러). /api/maplibre-worker 로 직접 지정해 우회한다.
+setWorkerUrl('/api/maplibre-worker');
 
 interface Props {
   origin: { lon: number; lat: number } | null;
@@ -80,13 +87,18 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
 
       // 통근권 영역. 등시선이면 실선, 직선 반경 폴백이면 점선으로 구분한다.
       // 사용자가 "이건 실제 통근시간이 아니라 근사" 임을 화면에서 알아야 한다.
+      //
+      // 색은 oklch()가 아니라 hex 다. MapLibre 의 paint 색상 파서는 CSS 브라우저
+      // 파서가 아니라 자체 구현(csscolorparser 계열)이라 oklch() 를 못 읽는다
+      // ("color expected, oklch(...) found" 로 레이어가 통째로 안 그려짐). 아래
+      // hex 는 이 파일에 있던 oklch 값을 그대로 변환한 값이다.
       map.addLayer({
         id: 'area-fill',
         type: 'fill',
         source: ORIGIN_SOURCE,
         filter: ['!=', ['geometry-type'], 'Point'],
         paint: {
-          'fill-color': 'oklch(0.55 0.18 265)',
+          'fill-color': '#3c68d9', // oklch(0.55 0.18 265)
           'fill-opacity': ['case', ['get', 'degraded'], 0.05, 0.09],
         },
       });
@@ -96,7 +108,7 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         source: ORIGIN_SOURCE,
         filter: ['!=', ['geometry-type'], 'Point'],
         paint: {
-          'line-color': 'oklch(0.55 0.18 265)',
+          'line-color': '#3c68d9', // oklch(0.55 0.18 265)
           'line-width': ['case', ['get', 'degraded'], 1.5, 2],
           'line-dasharray': ['case', ['get', 'degraded'], ['literal', [3, 2]], ['literal', [1, 0]]],
           'line-opacity': ['case', ['get', 'degraded'], 0.5, 0.75],
@@ -111,10 +123,10 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         filter: ['==', ['get', 'commuteUsable'], false],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 9],
-          'circle-color': 'oklch(0.65 0.02 260)',
+          'circle-color': '#88909c', // oklch(0.65 0.02 260)
           'circle-opacity': 0.5,
           'circle-stroke-width': 1.5,
-          'circle-stroke-color': 'oklch(0.45 0.02 260)',
+          'circle-stroke-color': '#4f5661', // oklch(0.45 0.02 260)
           'circle-stroke-opacity': 0.7,
         },
       });
@@ -134,7 +146,7 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
           'circle-color': ['get', 'color'],
           'circle-opacity': 0.85,
           'circle-stroke-width': 1,
-          'circle-stroke-color': 'oklch(1 0 0 / 0.75)',
+          'circle-stroke-color': 'rgba(255, 255, 255, 0.75)', // oklch(1 0 0 / 0.75)
         },
       });
 
@@ -145,9 +157,9 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
           'circle-radius': 8,
-          'circle-color': 'oklch(0.5 0.2 265)',
+          'circle-color': '#2955d3', // oklch(0.5 0.2 265)
           'circle-stroke-width': 3,
-          'circle-stroke-color': 'oklch(1 0 0)',
+          'circle-stroke-color': '#ffffff', // oklch(1 0 0)
         },
       });
 
@@ -237,15 +249,18 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
   return <div ref={containerRef} className="h-full w-full" />;
 }
 
+// hex 다. MapLibre paint 색상 파서는 oklch() 를 못 읽는다 — 위 addLayer 주석 참고.
+// 이 색은 GeoJSON feature property 로 들어가 'circle-color': ['get', 'color'] 로
+// 쓰이므로(buildings-reliable 레이어) 여기서도 hex 여야 한다.
 function colorFor(value: number | null, mode: 'wolse' | 'jeonse'): string {
-  if (value === null) return 'oklch(0.65 0.02 260)';
+  if (value === null) return '#88909c'; // oklch(0.65 0.02 260)
   const breaks = BREAKS[mode];
   const palette = [
-    'oklch(0.83 0.13 195)',
-    'oklch(0.74 0.15 165)',
-    'oklch(0.72 0.16 95)',
-    'oklch(0.68 0.18 55)',
-    'oklch(0.6 0.2 25)',
+    '#3be1e1', // oklch(0.83 0.13 195)
+    '#1fc893', // oklch(0.74 0.15 165)
+    '#c4a200', // oklch(0.72 0.16 95)
+    '#e97300', // oklch(0.68 0.18 55)
+    '#de3b3d', // oklch(0.6 0.2 25)
   ];
   let i = 0;
   while (i < breaks.length && value > breaks[i]!) i++;

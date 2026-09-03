@@ -73,7 +73,7 @@ export default function SearchBar({ onResolved, disabled }: Props) {
           disabled={disabled || busy || q.trim().length < 2}
           className="rounded-lg bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-neutral-700 disabled:bg-neutral-300"
         >
-          {busy ? '검색' : '검색'}
+          {busy ? '검색 중…' : '검색'}
         </button>
       </div>
       <p className="mt-1.5 text-[11px] text-neutral-400">
