@@ -178,30 +178,7 @@ function LoadingOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-7 rounded-3xl border border-cyan-400/30 bg-neutral-950/90 px-20 py-16 shadow-[0_0_90px_-10px_rgba(34,211,238,0.55)]">
-        <svg
-          className="h-36 w-36 animate-spin"
-          style={{ animationDuration: '0.9s' }}
-          viewBox="0 0 50 50"
-          fill="none"
-        >
-          <defs>
-            {/* 시작(굵고 밝음)에서 끝(가늘고 투명)으로 꼬리가 빠지는 스피너. */}
-            <linearGradient id="spinnerTail" x1="100%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#22d3ee" stopOpacity="1" />
-              <stop offset="85%" stopColor="#22d3ee" stopOpacity="0.15" />
-              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <circle
-            cx="25"
-            cy="25"
-            r="21"
-            stroke="url(#spinnerTail)"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeDasharray="112 132"
-          />
-        </svg>
+        <DotSpinner />
         <div className="flex flex-col items-center gap-1.5">
           <p className="bg-gradient-to-b from-cyan-200 to-cyan-500 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
             불러오는 중
@@ -209,6 +186,35 @@ function LoadingOverlay() {
           <p className="text-[13px] text-neutral-400">통근권과 시세를 다시 계산하고 있습니다</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Windows 로딩 스피너처럼 점 12개가 원을 그리며 도는 형태. 각 점은 유리구슬처럼
+ * 하이라이트를 넣고 발광 그림자를 씌워 입체감을 준다. */
+const SPINNER_DOTS = Array.from({ length: 12 }, (_, i) => i);
+
+function DotSpinner() {
+  return (
+    <div className="relative h-36 w-36 animate-spin" style={{ animationDuration: '1.3s' }}>
+      {SPINNER_DOTS.map((i) => {
+        const angle = (i / SPINNER_DOTS.length) * 360;
+        const t = i / SPINNER_DOTS.length; // 0 = 머리(가장 밝음) → 1 직전 = 꼬리(가장 흐림)
+        const opacity = 1 - t * 0.88;
+        const scale = 1 - t * 0.55;
+        return (
+          <span
+            key={i}
+            className="absolute top-1/2 left-1/2 h-4 w-4 rounded-full"
+            style={{
+              transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-62px) scale(${scale})`,
+              opacity,
+              background: 'radial-gradient(circle at 32% 28%, #cffafe 0%, #22d3ee 45%, #0891b2 80%, #155e75 100%)',
+              boxShadow: `0 0 ${12 * (1 - t) + 2}px ${2 + 2 * (1 - t)}px rgba(34,211,238,${0.85 * (1 - t) + 0.1})`,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
