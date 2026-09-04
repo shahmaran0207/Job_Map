@@ -27,7 +27,8 @@ import { buildListingLinks } from '../../src/lib/listing-links';
  *    법정동 중심점이라 위치가 실제 건물이 아니다. 같은 모양으로 그리면 지도가
  *    조용히 거짓말을 한다. 사용자가 "이건 대략적인 값" 임을 보게 만든다.
  */
-const TILE_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+// 다크(관제센터 톤) 배경 타일. OpenFreeMap이 liberty/bright/positron 외에 dark도 제공한다.
+const TILE_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const SOURCE_ID = 'buildings';
 const ORIGIN_SOURCE = 'origin';
 
@@ -106,8 +107,8 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         source: ORIGIN_SOURCE,
         filter: ['!=', ['geometry-type'], 'Point'],
         paint: {
-          'fill-color': '#3c68d9', // oklch(0.55 0.18 265)
-          'fill-opacity': ['case', ['get', 'degraded'], 0.05, 0.09],
+          'fill-color': '#22d3ee',
+          'fill-opacity': ['case', ['get', 'degraded'], 0.06, 0.12],
         },
       });
       map.addLayer({
@@ -116,10 +117,10 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         source: ORIGIN_SOURCE,
         filter: ['!=', ['geometry-type'], 'Point'],
         paint: {
-          'line-color': '#3c68d9', // oklch(0.55 0.18 265)
+          'line-color': '#67e8f9',
           'line-width': ['case', ['get', 'degraded'], 1.5, 2],
           'line-dasharray': ['case', ['get', 'degraded'], ['literal', [3, 2]], ['literal', [1, 0]]],
-          'line-opacity': ['case', ['get', 'degraded'], 0.5, 0.75],
+          'line-opacity': ['case', ['get', 'degraded'], 0.6, 0.9],
         },
       });
 
@@ -131,11 +132,11 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         filter: ['==', ['get', 'commuteUsable'], false],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 9],
-          'circle-color': '#88909c', // oklch(0.65 0.02 260)
-          'circle-opacity': 0.5,
+          'circle-color': '#8b96a3',
+          'circle-opacity': 0.55,
           'circle-stroke-width': 1.5,
-          'circle-stroke-color': '#4f5661', // oklch(0.45 0.02 260)
-          'circle-stroke-opacity': 0.7,
+          'circle-stroke-color': '#4b5563',
+          'circle-stroke-opacity': 0.8,
         },
       });
 
@@ -152,9 +153,10 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
             15, ['interpolate', ['linear'], ['get', 'deals'], 1, 7, 30, 14],
           ],
           'circle-color': ['get', 'color'],
-          'circle-opacity': 0.85,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': 'rgba(255, 255, 255, 0.75)', // oklch(1 0 0 / 0.75)
+          'circle-opacity': 0.9,
+          'circle-stroke-width': 1.25,
+          // 어두운 지도 위라 옅은 시안 테두리로 도트에 halo 를 준다.
+          'circle-stroke-color': 'rgba(207, 250, 254, 0.55)',
         },
       });
 
@@ -165,9 +167,9 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
           'circle-radius': 8,
-          'circle-color': '#2955d3', // oklch(0.5 0.2 265)
+          'circle-color': '#22d3ee',
           'circle-stroke-width': 3,
-          'circle-stroke-color': '#ffffff', // oklch(1 0 0)
+          'circle-stroke-color': '#083344',
         },
       });
 
@@ -261,7 +263,7 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
 // 이 색은 GeoJSON feature property 로 들어가 'circle-color': ['get', 'color'] 로
 // 쓰이므로(buildings-reliable 레이어) 여기서도 hex 여야 한다.
 function colorFor(value: number | null, mode: 'wolse' | 'jeonse'): string {
-  if (value === null) return '#88909c'; // oklch(0.65 0.02 260)
+  if (value === null) return '#8b96a3';
   const breaks = BREAKS[mode];
   const palette = [
     '#3be1e1', // oklch(0.83 0.13 195)
@@ -326,7 +328,7 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
   // 구분하면 사용자가 이유를 모른다.
   const warn = p.commuteUsable
     ? ''
-    : `<div class="mt-1.5 rounded bg-amber-50 px-1.5 py-1 text-[11px] leading-snug text-amber-900">
+    : `<div class="mt-1.5 rounded bg-amber-400/10 px-1.5 py-1 text-[11px] leading-snug text-amber-300 border border-amber-400/20">
          정확한 위치가 공개되지 않는 유형입니다. <b>${esc(p.dong)} 일대</b>의 시세로 보세요.
        </div>`;
 
@@ -347,12 +349,12 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
       })
     : [];
   const linkButtons = links.length
-    ? `<div class="mt-2 flex flex-wrap gap-1 border-t border-neutral-100 pt-1.5">
+    ? `<div class="mt-2 flex flex-wrap gap-1 border-t border-cyan-400/15 pt-1.5">
          ${links
            .map(
              (l) =>
                `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
-                   class="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-200">
+                   class="rounded bg-cyan-400/10 px-1.5 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-400/20">
                   ${esc(l.label)}
                 </a>`,
            )
@@ -362,12 +364,12 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
 
   return `
     <div class="min-w-44">
-      <div class="text-[13px] font-semibold leading-tight">${name}</div>
-      <div class="mt-0.5 text-[11px] text-neutral-500">${type} · ${esc(p.dong)} · ${dist}km</div>
-      <div class="mt-2 text-[13px] font-medium">
-        ${deposit}${rent ? ` / ${rent}` : ' <span class="text-neutral-500">전세</span>'}
+      <div class="text-[13px] font-semibold leading-tight text-neutral-50">${name}</div>
+      <div class="mt-0.5 text-[11px] text-neutral-400">${type} · ${esc(p.dong)} · ${dist}km</div>
+      <div class="mt-2 text-[13px] font-medium text-cyan-100">
+        ${deposit}${rent ? ` / ${rent}` : ' <span class="text-neutral-400">전세</span>'}
       </div>
-      <div class="mt-1 text-[11px] text-neutral-500">
+      <div class="mt-1 text-[11px] text-neutral-400">
         ${area ? `${area}㎡ (${toPyeong(area)}) · ` : ''}거래 ${esc(p.deals)}건
         ${p.builtYear ? ` · ${esc(p.builtYear)}년` : ''}
       </div>

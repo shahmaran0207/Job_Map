@@ -53,7 +53,7 @@ export default function SearchBar({ onResolved, disabled }: Props) {
 
   return (
     <form onSubmit={submit}>
-      <label htmlFor="workplace" className="mb-1.5 block font-medium text-neutral-800">
+      <label htmlFor="workplace" className="mb-1.5 block font-medium text-neutral-200">
         직장 위치
       </label>
       <div className="flex gap-2">
@@ -66,20 +66,20 @@ export default function SearchBar({ onResolved, disabled }: Props) {
           placeholder="회사명 또는 주소"
           autoComplete="off"
           maxLength={100}
-          className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-[13px] outline-none placeholder:text-neutral-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+          className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-[13px] text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/20"
         />
         <button
           type="submit"
           disabled={disabled || busy || q.trim().length < 2}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-neutral-700 disabled:bg-neutral-300"
+          className="rounded-lg bg-cyan-400/15 px-4 py-2 text-[13px] font-medium text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.35)] transition hover:bg-cyan-400/25 disabled:bg-neutral-900 disabled:text-neutral-600 disabled:shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
         >
           {busy ? '검색 중…' : '검색'}
         </button>
       </div>
-      <p className="mt-1.5 text-[11px] text-neutral-400">
+      <p className="mt-1.5 text-[11px] text-neutral-300">
         예: 카카오 판교, 삼성전자 수원, 서울 강남구 테헤란로 152
       </p>
-      {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-[12px] text-red-400">{error}</p>}
     </form>
   );
 }

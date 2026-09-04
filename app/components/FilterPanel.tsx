@@ -39,14 +39,16 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
   };
 
   return (
-    // 서버 왕복(공간 쿼리) 동안 disabled 만으로는 "멈췄다"로 보인다. 흐리게 처리해
-    // 지금 반응 안 하는 이유가 로딩 중이라는 걸 눈으로 알 수 있게 한다.
+    // 서버 왕복(공간 쿼리) 동안 disabled 만으로는 "멈췄다"로 보인다. 어두운
+    // 테마에서는 살짝 흐리게만 해서는 원래 어두운 텍스트인지 비활성인지
+    // 구별이 안 된다 — 그래서 색까지 완전히 빼서(grayscale) 시안 강조색이
+    // 사라지게 만든다. "꺼짐"이 색으로 확실히 드러난다.
     <div
-      className={`space-y-5 text-[13px] transition-opacity ${disabled ? 'pointer-events-none opacity-40' : ''}`}
+      className={`space-y-5 text-[13px] transition-all ${disabled ? 'pointer-events-none opacity-50 grayscale' : ''}`}
     >
       {/* 전세/월세는 금액 체계가 완전히 달라 가장 위에서 먼저 고르게 한다. */}
       <Field label="거래 방식">
-        <div className="flex gap-1 rounded-lg bg-neutral-100 p-1">
+        <div className="flex gap-1 rounded-lg border border-neutral-800 bg-neutral-900/60 p-1">
           {(['wolse', 'jeonse'] as const).map((m) => (
             <button
               key={m}
@@ -55,8 +57,8 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
               onClick={() => set('mode', m)}
               className={`flex-1 rounded-md px-3 py-1.5 font-medium transition ${
                 filters.mode === m
-                  ? 'bg-white text-neutral-900 shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700'
+                  ? 'bg-cyan-400/15 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.35)]'
+                  : 'text-neutral-400 hover:text-neutral-100'
               }`}
             >
               {m === 'wolse' ? '월세' : '전세'}
@@ -66,7 +68,7 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
       </Field>
 
       <Field label="이동수단">
-        <div className="flex gap-1 rounded-lg bg-neutral-100 p-1">
+        <div className="flex gap-1 rounded-lg border border-neutral-800 bg-neutral-900/60 p-1">
           {TRAVEL_MODES.map((t) => (
             <button
               key={t}
@@ -75,8 +77,8 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
               onClick={() => set('travel', t)}
               className={`flex-1 rounded-md px-2 py-1.5 font-medium transition ${
                 filters.travel === t
-                  ? 'bg-white text-neutral-900 shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700'
+                  ? 'bg-cyan-400/15 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.35)]'
+                  : 'text-neutral-400 hover:text-neutral-100'
               }`}
             >
               {TRAVEL_LABEL[t]}
@@ -98,8 +100,8 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
               onClick={() => set('minutes', m)}
               className={`rounded-md border px-2.5 py-1 tabular-nums transition ${
                 filters.minutes === m
-                  ? 'border-indigo-500 bg-indigo-50 font-medium text-indigo-700'
-                  : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
+                  ? 'border-cyan-400/50 bg-cyan-400/10 font-medium text-cyan-200 shadow-[0_0_12px_-4px_rgba(34,211,238,0.7)]'
+                  : 'border-neutral-800 text-neutral-300 hover:border-neutral-700'
               }`}
             >
               {m}분
@@ -120,8 +122,8 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
                 onClick={() => toggleType(t)}
                 className={`rounded-md border px-2.5 py-1.5 text-left transition ${
                   on
-                    ? 'border-indigo-500 bg-indigo-50 font-medium text-indigo-700'
-                    : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'
+                    ? 'border-cyan-400/50 bg-cyan-400/10 font-medium text-cyan-200 shadow-[0_0_12px_-4px_rgba(34,211,238,0.7)]'
+                    : 'border-neutral-800 text-neutral-300 hover:border-neutral-700'
                 }`}
               >
                 {HOUSING_LABEL_SHORT[t]}
@@ -159,9 +161,9 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
             value={filters.minArea}
             disabled={disabled}
             onChange={(e) => set('minArea', Number(e.target.value))}
-            className="flex-1 accent-indigo-600"
+            className="flex-1 accent-cyan-400"
           />
-          <span className="w-20 text-right tabular-nums text-neutral-600">
+          <span className="w-20 text-right tabular-nums text-neutral-300">
             {filters.minArea === 0 ? '제한 없음' : `${filters.minArea}㎡↑`}
           </span>
         </div>
@@ -177,9 +179,9 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
             value={BUILT_YEAR_STEPS.indexOf(filters.minBuiltYear)}
             disabled={disabled}
             onChange={(e) => set('minBuiltYear', BUILT_YEAR_STEPS[Number(e.target.value)]!)}
-            className="flex-1 accent-indigo-600"
+            className="flex-1 accent-cyan-400"
           />
-          <span className="w-20 text-right tabular-nums text-neutral-600">
+          <span className="w-20 text-right tabular-nums text-neutral-300">
             {filters.minBuiltYear === 0 ? '제한 없음' : `${filters.minBuiltYear}년↑`}
           </span>
         </div>
@@ -189,16 +191,16 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
         정확도 낮은 데이터를 숨길 수 있게 하되 기본은 표시한다. 숨기는 것이
         기본이면 단독·다가구가 통째로 사라져 사용자가 데이터가 없다고 오해한다.
       */}
-      <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-neutral-50 p-3">
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
         <input
           type="checkbox"
           checked={filters.includeUnreliable}
           disabled={disabled}
           onChange={(e) => set('includeUnreliable', e.target.checked)}
-          className="mt-0.5 accent-indigo-600"
+          className="mt-0.5 accent-cyan-400"
         />
-        <span className="text-neutral-600">
-          <span className="font-medium text-neutral-800">위치 부정확 유형 포함</span>
+        <span className="text-neutral-300">
+          <span className="font-medium text-neutral-200">위치 부정확 유형 포함</span>
           <span className="mt-0.5 block text-[11px] leading-snug">
             단독·다가구는 정부가 지번을 공개하지 않아 법정동 중심점으로 표시됩니다.
             지도에서 회색 점선으로 구분됩니다.
@@ -221,8 +223,8 @@ function Field({
   return (
     <div>
       <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="font-medium text-neutral-800">{label}</span>
-        {hint && <span className="text-[11px] text-neutral-400">{hint}</span>}
+        <span className="font-medium text-neutral-200">{label}</span>
+        {hint && <span className="text-[11px] text-neutral-300">{hint}</span>}
       </div>
       {children}
     </div>
@@ -261,9 +263,9 @@ function StepSlider({
           value={idx}
           disabled={disabled}
           onChange={(e) => onChange(steps[Number(e.target.value)]!)}
-          className="flex-1 accent-indigo-600"
+          className="flex-1 accent-cyan-400"
         />
-        <span className="w-20 text-right tabular-nums text-neutral-600">
+        <span className="w-20 text-right tabular-nums text-neutral-300">
           {value === 0 ? '제한 없음' : `${formatManwon(value)} 이하`}
         </span>
       </div>

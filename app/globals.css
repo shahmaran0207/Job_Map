@@ -29,16 +29,58 @@ body {
     'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
     'Malgun Gothic', sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* 관제센터 톤: 거의 검정 바탕에, 화면 위쪽에서 은은한 시안 빛이 도는 느낌. */
+  background-color: #08090b;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 238, 0.08), transparent);
+}
+
+/* 스크롤바도 라이트 테마 기본값이 튀지 않게. */
+* {
+  scrollbar-color: rgba(34, 211, 238, 0.35) transparent;
+  scrollbar-width: thin;
 }
 
 /* 지도 팝업을 앱 톤에 맞춘다. */
 .maplibregl-popup-content {
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.75rem 0.875rem;
-  box-shadow: 0 4px 16px oklch(0 0 0 / 0.18);
+  background: rgba(10, 12, 14, 0.96);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 20px -6px rgba(34, 211, 238, 0.35);
   font-size: 0.8125rem;
+  color: #e5eaee;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: rgba(10, 12, 14, 0.96) !important;
+  border-bottom-color: rgba(10, 12, 14, 0.96) !important;
 }
 
 .maplibregl-ctrl-attrib {
   font-size: 0.6875rem;
+}
+
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib a {
+  background-color: rgba(10, 12, 14, 0.75) !important;
+  color: #9ca7af !important;
+}
+
+.maplibregl-ctrl-group {
+  background: rgba(10, 12, 14, 0.9) !important;
+  border: 1px solid rgba(34, 211, 238, 0.25) !important;
+}
+
+.maplibregl-ctrl-group button {
+  background-color: transparent !important;
+}
+
+.maplibregl-ctrl-icon {
+  filter: invert(1) brightness(1.6);
+}
+
+.maplibregl-ctrl-scale {
+  background: rgba(10, 12, 14, 0.75) !important;
+  border-color: rgba(34, 211, 238, 0.35) !important;
+  color: #cfeff5 !important;
 }
