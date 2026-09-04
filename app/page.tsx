@@ -177,18 +177,36 @@ export default function Page() {
 function LoadingOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-cyan-400/30 bg-neutral-950/90 px-12 py-10 shadow-[0_0_60px_-15px_rgba(34,211,238,0.5)]">
-        <span
-          className="h-20 w-20 animate-spin rounded-full bg-gradient-to-t from-cyan-400/10 via-cyan-400/60 to-cyan-300 p-[5px] shadow-[0_0_25px_2px_rgba(34,211,238,0.55)]"
-          style={{ animationDuration: '0.8s' }}
+      <div className="flex flex-col items-center gap-7 rounded-3xl border border-cyan-400/30 bg-neutral-950/90 px-20 py-16 shadow-[0_0_90px_-10px_rgba(34,211,238,0.55)]">
+        <svg
+          className="h-36 w-36 animate-spin"
+          style={{ animationDuration: '0.9s' }}
+          viewBox="0 0 50 50"
+          fill="none"
         >
-          <span className="block h-full w-full rounded-full bg-neutral-950" />
-        </span>
-        <div className="flex flex-col items-center gap-1">
-          <p className="bg-gradient-to-b from-cyan-200 to-cyan-500 bg-clip-text text-xl font-bold tracking-tight text-transparent">
+          <defs>
+            {/* 시작(굵고 밝음)에서 끝(가늘고 투명)으로 꼬리가 빠지는 스피너. */}
+            <linearGradient id="spinnerTail" x1="100%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#22d3ee" stopOpacity="1" />
+              <stop offset="85%" stopColor="#22d3ee" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <circle
+            cx="25"
+            cy="25"
+            r="21"
+            stroke="url(#spinnerTail)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray="112 132"
+          />
+        </svg>
+        <div className="flex flex-col items-center gap-1.5">
+          <p className="bg-gradient-to-b from-cyan-200 to-cyan-500 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
             불러오는 중
           </p>
-          <p className="text-[12px] text-neutral-400">통근권과 시세를 다시 계산하고 있습니다</p>
+          <p className="text-[13px] text-neutral-400">통근권과 시세를 다시 계산하고 있습니다</p>
         </div>
       </div>
     </div>
