@@ -73,8 +73,11 @@ services:
       serve_tiles: 'True'
       server_threads: '4'
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
+    # gis-ops 이미지 자체 엔트리포인트가 부팅 중 sudo 로 권한을 오르내린다
+    # (파일 소유권 정리 등). no-new-privileges 를 걸면 그 sudo 호출이 막혀
+    # 컨테이너가 exit 1 로 죽고 재시작을 반복한다 — 실측으로 확인함.
+    # 엔진 포트는 어차피 호스트에 노출되지 않으므로(expose 만, ports 없음)
+    # 이 완화의 실질 위험은 낮다.
     deploy:
       resources:
         limits:

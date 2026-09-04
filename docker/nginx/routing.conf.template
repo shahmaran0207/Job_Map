@@ -6,6 +6,11 @@ limit_req_zone $binary_remote_addr zone=routing_rl:10m rate=5r/s;
 limit_conn_zone $binary_remote_addr zone=routing_conn:10m;
 
 # Bearer 토큰 검사. 값이 정확히 일치할 때만 1.
+# 토큰이 길어서(openssl rand -hex 32) 기본 해시 버킷 크기(64바이트)를 넘는다.
+# 안 늘리면 "could not build map_hash, you should increase map_hash_bucket_size"
+# 로 nginx 가 기동 자체를 못 한다 — 실측으로 확인함.
+map_hash_bucket_size 128;
+
 map $http_authorization $routing_authorized {
     default                        0;
     "Bearer ${ROUTING_TOKEN}"      1;
