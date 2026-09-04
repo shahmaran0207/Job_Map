@@ -208,7 +208,6 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 - 라우팅 엔진은 개발 PC Docker + Cloudflare Tunnel, 앞단에 Cloudflare Access
 
 **남은 것**
-- **`collect.yml` 을 실거래가 수집기로 교체** (현재는 워크넷 기준 — 0번 ② 참고)
 - Cloudflare Tunnel 설정 (`cloudflared` 설치 → tunnel 생성 → docker-compose에 서비스 추가)
 - Vercel 배포 (`DATABASE_URL`, `KAKAO_REST_KEY`, `ROUTING_TOKEN` 환경변수 등록)
 
