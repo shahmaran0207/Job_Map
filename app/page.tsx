@@ -77,6 +77,8 @@ export default function Page() {
 
   return (
     <main className="flex h-dvh flex-col md:flex-row">
+      {loading && <LoadingOverlay />}
+
       <aside className="flex shrink-0 flex-col gap-5 overflow-y-auto border-neutral-200 bg-white p-5 md:w-88 md:border-r">
         <header>
           <h1 className="text-[15px] font-semibold tracking-tight text-neutral-900">
@@ -161,7 +163,6 @@ export default function Page() {
         )}
 
         {origin && <Legend mode={filters.mode} />}
-        {origin && loading && <LoadingBadge />}
       </section>
     </main>
   );
@@ -169,14 +170,24 @@ export default function Page() {
 
 /**
  * 필터를 바꾸면 서버 왕복(공간 쿼리 + 집계) 이 있어 즉시 반영되지 않는다.
- * 버튼 disabled 상태만으로는 "느리다/고장났다"로 오해하기 쉬워서, 지도 위에
- * 눈에 띄는 배지를 따로 둔다.
+ * 버튼 disabled 상태만으로는 "느리다/고장났다"로 오해하기 쉬워서, 화면 전체를
+ * 반투명하게 덮고 중앙에 큰 로딩 패널을 띄운다 — 지금 뭔가 진행 중이라는 걸
+ * 놓칠 수 없게 만드는 게 목적이다.
  */
-function LoadingBadge() {
+function LoadingOverlay() {
   return (
-    <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-neutral-900/90 px-3.5 py-2 text-[12px] font-medium text-white shadow-lg">
-      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-      불러오는 중…
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-cyan-400/30 bg-neutral-950/90 px-12 py-10 shadow-[0_0_60px_-15px_rgba(34,211,238,0.5)]">
+        <span className="relative flex h-16 w-16 items-center justify-center">
+          <span className="absolute inset-0 animate-spin rounded-full border-4 border-cyan-400/20 border-t-cyan-300" />
+        </span>
+        <div className="flex flex-col items-center gap-1">
+          <p className="bg-gradient-to-b from-cyan-200 to-cyan-500 bg-clip-text text-xl font-bold tracking-tight text-transparent">
+            불러오는 중
+          </p>
+          <p className="text-[12px] text-neutral-400">통근권과 시세를 다시 계산하고 있습니다</p>
+        </div>
+      </div>
     </div>
   );
 }
