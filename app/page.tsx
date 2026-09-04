@@ -79,7 +79,13 @@ export default function Page() {
     <main className="flex h-dvh flex-col md:flex-row">
       {loading && <LoadingOverlay />}
 
-      <aside className="flex shrink-0 flex-col gap-5 overflow-y-auto border-cyan-400/10 bg-neutral-950/90 p-5 backdrop-blur-md md:w-88 md:border-r">
+      {/*
+        모바일(세로 쌓임)에서는 사이드바 높이를 45vh 로 묶어서 내부에서만
+        스크롤하게 한다. 안 그러면 필터가 전부 펼쳐지며 지도를 화면 밖으로
+        밀어내 버린다 — 지도가 앱의 핵심인데 스크롤을 한참 내려야만 보였다.
+        데스크톱(가로 배치)에서는 원래대로 전체 높이를 쓴다.
+      */}
+      <aside className="flex max-h-[45vh] shrink-0 flex-col gap-5 overflow-y-auto border-cyan-400/10 bg-neutral-950/90 p-5 backdrop-blur-md md:max-h-none md:w-88 md:border-r">
         <header>
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_2px_rgba(34,211,238,0.7)]" />
