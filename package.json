@@ -25,6 +25,7 @@
     "test:molit": "tsx src/scripts/smoke-molit-parse.ts",
     "stats:rent": "tsx src/scripts/stats-rent.ts",
     "geocode:buildings": "tsx src/scripts/geocode-buildings.ts",
+    "check:deeplinks": "tsx src/scripts/check-deeplinks.ts",
     "dev": "next dev -p 3000 -H 127.0.0.1",
     "build": "next build",
     "start": "next dev -p 3000 -H 127.0.0.1",
