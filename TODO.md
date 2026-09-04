@@ -50,7 +50,7 @@ npm run routing:check    # 진단 — 무엇이 왜 안 되는지 알려준다
 - [x] Docker 구성 (Valhalla + nginx 인증 프록시) — 2026-08-30
 - [x] CI 보안 검사 실패 2건 수정 (CodeQL 중복 init, postcss overrides) — 2026-08-30
 - [x] collect.yml — 실거래가 수집 크론으로 교체 — 2026-09-02
-- [x] 딥링크 UI 연결 (`RentMap.tsx` 팝업에 네이버부동산·직방·다방 링크) — 2026-09-03
+- [x] 딥링크 UI 배선 완료했으나 URL 3개 다 깨진 것 확인 → 버튼 비활성화 (`SHOW_LISTING_LINKS`) — 2026-09-04
 - [x] 지도 렌더링 버그 3건 수정 (CSP nonce, MapLibre 워커 URL, oklch 색상) — 2026-09-04
 - [x] 건축년도 필터 (`FilterPanel.tsx` 슬라이더 + `/api/rents` 쿼리) — 2026-09-04
 
@@ -182,13 +182,23 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 
 ---
 
-## 6. 매물 검색 딥링크 — 완료 (2026-09-03)
+## 6. 매물 검색 딥링크 — 버튼 꺼둠, URL 재조사 필요 (2026-09-04)
 
-`src/lib/listing-links.ts` 구현 완료. 네이버부동산·직방·다방 URL 빌더, 유형별 서비스 분기, 건물명/지역명 검색어 생성 로직 포함. `RentMap.tsx` 팝업에 링크 버튼 연결됨(`/api/rents`가 `sido`/`sigungu`를 내려주도록 확장).
+`src/lib/listing-links.ts`, `RentMap.tsx` 팝업 연결 자체는 구현 완료했지만, **`npm run check:deeplinks` 로 나온 URL 3개를 실제 브라우저(Playwright)로 열어서 확인해보니 셋 다 깨져 있었다.**
+
+| 서비스 | 시도한 URL | 결과 |
+|---|---|---|
+| 네이버부동산 | `m.land.naver.com/search/result/{검색어}` | 건물명이든 흔한 동명("강남구 개포동")이든 전부 "검색결과가 없습니다". 이 구주소 방식 자체가 죽은 것으로 보임 — 지금은 `fin.land.naver.com` SPA 지도앱으로 이전됨 |
+| 직방 | `zigbang.com/search?q=` | 그 경로 자체가 없음, 404 |
+| 다방 | `dabangapp.com/search?search=` | 파라미터를 안 읽고 홈으로 리다이렉트 |
+
+세 사이트 다 검색어 기반 딥링크에서 자체 지도앱/자동완성 흐름으로 바뀐 것으로 보인다. `RentMap.tsx`에 `SHOW_LISTING_LINKS = false` 플래그로 버튼을 꺼뒀다 — 깨진 링크를 사용자에게 보여주는 것보다 안 보여주는 게 낫다.
 
 **남은 것**
-- `npm run check:deeplinks` 로 실제 URL 클릭 확인 → `verified: true` 로 올리기 (아직 미검증)
-- 딥링크 클릭 이벤트 기록 (전환 측정의 기초)
+- 사이트별로 실제 검색 흐름을 다시 조사해서 URL 빌더 교체 (비공식 API라 시간이 걸리고, 또 바뀔 수 있음)
+- 또는 "검색어만 클립보드에 복사" 방식으로 축소하는 것도 검토 (구현 간단, 항상 동작)
+- 고치면 `RentMap.tsx` 의 `SHOW_LISTING_LINKS` 를 `true` 로
+- 딥링크 클릭 이벤트 기록 (전환 측정의 기초) — URL 고친 뒤에
 
 ---
 

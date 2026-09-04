@@ -31,6 +31,10 @@ const TILE_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const SOURCE_ID = 'buildings';
 const ORIGIN_SOURCE = 'origin';
 
+// 매물 검색 딥링크 버튼. 3개 사이트 URL이 전부 깨져 있어 꺼둔 상태다.
+// TODO.md 6장 참고 — 재조사 후 다시 켤 것.
+const SHOW_LISTING_LINKS = false;
+
 // MapLibre는 워커 스크립트 위치를 import.meta.url로 자동 계산하는데, webpack
 // 번들 안에서는 그 값이 실제 URL이 아니라서 워커가 빈 URL로 뜬다 — 결국 현재
 // 페이지 HTML을 모듈 스크립트로 읽으려다 죽는다(콘솔의 "non-JavaScript MIME
@@ -327,15 +331,21 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
        </div>`;
 
   // 실거래가는 과거 거래 기록이지 지금 나와 있는 매물이 아니다. 지역·건물을
-  // 좁혀준 뒤 실제 매물 검색은 부동산 서비스로 넘긴다.
-  const links = buildListingLinks({
-    name: p.name as string | null,
-    sido: p.sido as string | null,
-    sigungu: p.sigungu as string | null,
-    legalDong: p.dong as string | null,
-    housingType: p.type as BuildingPoint['type'],
-    mode,
-  });
+  // 좁혀준 뒤 실제 매물 검색은 부동산 서비스로 넘긴다 — 다만 지금은 꺼져 있다.
+  // 2026-09-04에 실제 브라우저로 확인해보니 네이버부동산·직방·다방 URL 빌더
+  // 3개가 전부 깨져 있었다(사이트들이 검색어 기반 딥링크에서 자체 지도앱/
+  // 자동완성 흐름으로 바뀐 걸로 보임). listing-links.ts는 그대로 두고 버튼만
+  // 숨긴다 — TODO.md 6장에 원인과 재조사 항목을 남겨뒀다.
+  const links = SHOW_LISTING_LINKS
+    ? buildListingLinks({
+        name: p.name as string | null,
+        sido: p.sido as string | null,
+        sigungu: p.sigungu as string | null,
+        legalDong: p.dong as string | null,
+        housingType: p.type as BuildingPoint['type'],
+        mode,
+      })
+    : [];
   const linkButtons = links.length
     ? `<div class="mt-2 flex flex-wrap gap-1 border-t border-neutral-100 pt-1.5">
          ${links
