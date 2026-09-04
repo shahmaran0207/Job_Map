@@ -161,8 +161,23 @@ export default function Page() {
         )}
 
         {origin && <Legend mode={filters.mode} />}
+        {origin && loading && <LoadingBadge />}
       </section>
     </main>
+  );
+}
+
+/**
+ * 필터를 바꾸면 서버 왕복(공간 쿼리 + 집계) 이 있어 즉시 반영되지 않는다.
+ * 버튼 disabled 상태만으로는 "느리다/고장났다"로 오해하기 쉬워서, 지도 위에
+ * 눈에 띄는 배지를 따로 둔다.
+ */
+function LoadingBadge() {
+  return (
+    <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-neutral-900/90 px-3.5 py-2 text-[12px] font-medium text-white shadow-lg">
+      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+      불러오는 중…
+    </div>
   );
 }
 

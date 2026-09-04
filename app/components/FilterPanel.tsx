@@ -39,7 +39,11 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
   };
 
   return (
-    <div className="space-y-5 text-[13px]">
+    // 서버 왕복(공간 쿼리) 동안 disabled 만으로는 "멈췄다"로 보인다. 흐리게 처리해
+    // 지금 반응 안 하는 이유가 로딩 중이라는 걸 눈으로 알 수 있게 한다.
+    <div
+      className={`space-y-5 text-[13px] transition-opacity ${disabled ? 'pointer-events-none opacity-40' : ''}`}
+    >
       {/* 전세/월세는 금액 체계가 완전히 달라 가장 위에서 먼저 고르게 한다. */}
       <Field label="거래 방식">
         <div className="flex gap-1 rounded-lg bg-neutral-100 p-1">
