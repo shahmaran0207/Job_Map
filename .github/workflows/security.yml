@@ -22,7 +22,18 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts # 설치 스크립트 실행 차단 (공급망 방어)
       - name: npm audit
-        run: npm audit --audit-level=high
+        # registry.npmjs.org 의 audit 엔드포인트가 가끔 503/400 을 던지고
+        # 한 번 그러면 5~7분씩 물고 있다가 실패한다(코드 문제가 아니라 npm
+        # 쪽 이슈 — 실제로 여러 번 재현됨, npm 자체도 이 엔드포인트가
+        # retire 예정이라는 notice 를 띄운다). 재시도 + 시도당 타임아웃으로
+        # 한 번의 일시 장애가 12분짜리 CI 실패로 번지지 않게 한다.
+        run: |
+          for i in 1 2 3; do
+            timeout 90 npm audit --audit-level=high && exit 0
+            echo "npm audit 실패, 재시도 ($i/3)"
+            sleep 5
+          done
+          exit 1
       # 타입 검사와 파싱 회귀 테스트는 ci.yml 로 옮겼다. 이 워크플로는 보안 검사만 담당한다.
 
   secrets:
