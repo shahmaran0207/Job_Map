@@ -198,7 +198,10 @@ function DotSpinner() {
   return (
     <div className="relative h-36 w-36 animate-spin" style={{ animationDuration: '1.3s' }}>
       {SPINNER_DOTS.map((i) => {
-        const angle = (i / SPINNER_DOTS.length) * 360;
+        // 회전은 시계방향(animate-spin)인데 꼬리를 +방향에 두면 꼬리가 머리보다
+        // 앞서 도는 것처럼 보인다(거꾸로 도는 느낌). 꼬리를 반대(-)로 둬야
+        // 머리가 앞장서고 꼬리가 뒤에서 옅어지며 따라오는 방향이 맞는다.
+        const angle = -(i / SPINNER_DOTS.length) * 360;
         const t = i / SPINNER_DOTS.length; // 0 = 머리(가장 밝음) → 1 직전 = 꼬리(가장 흐림)
         const opacity = 1 - t * 0.88;
         const scale = 1 - t * 0.55;
