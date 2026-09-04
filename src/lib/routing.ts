@@ -1,5 +1,16 @@
 import { env } from './env';
-import { assertKoreanCoord, safeFetch } from './security';
+import { assertKoreanCoord, isBlockedIp, safeFetch } from './security';
+
+// 로컬 개발용 엔진(127.0.0.1)이 꺼져 있으면 빨리 실패해서 직선 반경으로
+// 물러서야 한다 — 안 그러면 검색/필터 한 번에 최대 40초씩 멈춘 것처럼 보인다.
+// 실제 배포(Cloudflare Tunnel 뒤 원격 엔진)는 등시선 계산 자체가 오래 걸릴 수
+// 있어 타임아웃을 넉넉하게 둔다.
+const LOCAL_ROUTING_TIMEOUT_MS = 2_000;
+const REMOTE_ROUTING_TIMEOUT_MS = 40_000;
+
+function isLocalRoutingHost(hostname: string): boolean {
+  return hostname === 'localhost' || isBlockedIp(hostname);
+}
 
 /**
  * 라우팅 엔진 클라이언트.
@@ -69,6 +80,10 @@ export async function isochrone(
         generalize: 50,
       });
 
+  const timeoutMs = isLocalRoutingHost(new URL(url).hostname)
+    ? LOCAL_ROUTING_TIMEOUT_MS
+    : REMOTE_ROUTING_TIMEOUT_MS;
+
   const res = await safeFetch(endpoint, {
     method: 'POST',
     body,
@@ -76,7 +91,7 @@ export async function isochrone(
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     maxRedirects: 0,
     maxBytes: 8 * 1024 * 1024,
-    timeoutMs: 40_000,
+    timeoutMs,
   });
 
   if (res.status === 401) throw new Error('라우팅 프록시 인증 실패 (ROUTING_TOKEN 불일치)');
