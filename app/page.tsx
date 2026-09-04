@@ -45,6 +45,7 @@ export default function Page() {
       maxDeposit: String(f.maxDeposit),
       maxRent: String(f.maxRent),
       minArea: String(f.minArea),
+      minBuiltYear: String(f.minBuiltYear),
       types: f.types.join(','),
       unreliable: f.includeUnreliable ? '1' : '0',
     });

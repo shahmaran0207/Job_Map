@@ -113,6 +113,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const maxDepositManwon = intParam(p.get('maxDeposit'), 0, 0, 2_000_000);
   const maxRentManwon = intParam(p.get('maxRent'), 0, 0, 100_000);
   const minArea = intParam(p.get('minArea'), 0, 0, 1000);
+  const minBuiltYear = intParam(p.get('minBuiltYear'), 0, 0, 2100);
 
   const typesRaw = (p.get('types') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   const types = typesRaw.filter((t): t is HousingType => (HOUSING_TYPES as string[]).includes(t));
@@ -172,6 +173,7 @@ export async function GET(req: Request): Promise<NextResponse> {
             AND ST_Intersects(b.geom, a.g)
             AND b.housing_type = ANY($4::text[])
             AND ($5::boolean OR b.commute_usable)
+            AND ($12::int = 0 OR b.built_year >= $12)
        )
        SELECT n.id, n.name, n.housing_type, n.legal_dong, n.built_year,
               n.commute_usable, n.geo_precision, n.sido, n.sigungu,
@@ -200,7 +202,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         typeFilter, includeUnreliable,
         monthsAgo(MONTHS_WINDOW), mode,
         maxDepositManwon * 10_000, maxRentManwon * 10_000, minArea,
-        MAX_RESULTS,
+        MAX_RESULTS, minBuiltYear,
       ],
     );
 

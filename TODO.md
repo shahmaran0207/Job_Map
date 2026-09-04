@@ -35,10 +35,6 @@ npm run routing:check    # 진단 — 무엇이 왜 안 되는지 알려준다
 
 시작 전 `npm run stats:rent` 로 현재 수치를 확인할 것. 위 숫자는 그 시점 기준이다.
 
-### ④ 건축년도 필터 추가
-
-DB에 `built_year` 가 있고 API 응답에도 `builtYear` 가 내려오고 있다. `FilterPanel.tsx`에 슬라이더만 추가하면 된다. 예: "2000년 이후" 같은 구간 필터.
-
 ---
 
 ## 완료 항목
@@ -55,6 +51,8 @@ DB에 `built_year` 가 있고 API 응답에도 `builtYear` 가 내려오고 있�
 - [x] CI 보안 검사 실패 2건 수정 (CodeQL 중복 init, postcss overrides) — 2026-08-30
 - [x] collect.yml — 실거래가 수집 크론으로 교체 — 2026-09-02
 - [x] 딥링크 UI 연결 (`RentMap.tsx` 팝업에 네이버부동산·직방·다방 링크) — 2026-09-03
+- [x] 지도 렌더링 버그 3건 수정 (CSP nonce, MapLibre 워커 URL, oklch 색상) — 2026-09-04
+- [x] 건축년도 필터 (`FilterPanel.tsx` 슬라이더 + `/api/rents` 쿼리) — 2026-09-04
 
 ---
 
@@ -178,7 +176,6 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 
 ### 남은 작업
 
-- **건축년도 필터** — DB에 데이터 있음. `FilterPanel.tsx`에 슬라이더 추가
 - 전국 데이터 밀집 지역 클러스터링 검토 (현재 결과 상한 3,000건으로 제어)
 - 동 단위 히트맵 레이어 (건물 핀과 두 층으로)
 - 모바일 레이아웃 다듬기 (현재는 사이드바가 위로 쌓임)

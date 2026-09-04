@@ -24,6 +24,8 @@ const TYPES: HousingType[] = ['apt', 'offi', 'rh', 'sh'];
 /** 상한 슬라이더 값. 0 은 '제한 없음'. */
 const DEPOSIT_STEPS = [0, 500, 1000, 2000, 3000, 5000, 10_000, 20_000, 50_000, 100_000];
 const RENT_STEPS = [0, 30, 40, 50, 60, 70, 80, 100, 130, 200, 300];
+/** 0 은 '제한 없음'. 나머지는 준공년도 하한. */
+const BUILT_YEAR_STEPS = [0, 1990, 2000, 2005, 2010, 2015, 2020];
 
 export default function FilterPanel({ filters, onChange, disabled, degraded }: Props) {
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
@@ -157,6 +159,24 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
           />
           <span className="w-20 text-right tabular-nums text-neutral-600">
             {filters.minArea === 0 ? '제한 없음' : `${filters.minArea}㎡↑`}
+          </span>
+        </div>
+      </Field>
+
+      <Field label="건축년도">
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={BUILT_YEAR_STEPS.length - 1}
+            step={1}
+            value={BUILT_YEAR_STEPS.indexOf(filters.minBuiltYear)}
+            disabled={disabled}
+            onChange={(e) => set('minBuiltYear', BUILT_YEAR_STEPS[Number(e.target.value)]!)}
+            className="flex-1 accent-indigo-600"
+          />
+          <span className="w-20 text-right tabular-nums text-neutral-600">
+            {filters.minBuiltYear === 0 ? '제한 없음' : `${filters.minBuiltYear}년↑`}
           </span>
         </div>
       </Field>

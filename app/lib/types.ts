@@ -80,6 +80,8 @@ export interface Filters {
   maxDeposit: number;
   maxRent: number;
   minArea: number;
+  /** 연도. 0 = 제한 없음 */
+  minBuiltYear: number;
   types: HousingType[];
   includeUnreliable: boolean;
 }
@@ -91,6 +93,7 @@ export const DEFAULT_FILTERS: Filters = {
   maxDeposit: 0,
   maxRent: 0,
   minArea: 0,
+  minBuiltYear: 0,
   types: ['apt', 'offi', 'rh', 'sh'],
   includeUnreliable: true,
 };
