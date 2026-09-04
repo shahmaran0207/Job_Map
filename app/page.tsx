@@ -178,8 +178,11 @@ function LoadingOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-cyan-400/30 bg-neutral-950/90 px-12 py-10 shadow-[0_0_60px_-15px_rgba(34,211,238,0.5)]">
-        <span className="relative flex h-16 w-16 items-center justify-center">
-          <span className="absolute inset-0 animate-spin rounded-full border-4 border-cyan-400/20 border-t-cyan-300" />
+        <span
+          className="h-20 w-20 animate-spin rounded-full bg-gradient-to-t from-cyan-400/10 via-cyan-400/60 to-cyan-300 p-[5px] shadow-[0_0_25px_2px_rgba(34,211,238,0.55)]"
+          style={{ animationDuration: '0.8s' }}
+        >
+          <span className="block h-full w-full rounded-full bg-neutral-950" />
         </span>
         <div className="flex flex-col items-center gap-1">
           <p className="bg-gradient-to-b from-cyan-200 to-cyan-500 bg-clip-text text-xl font-bold tracking-tight text-transparent">
