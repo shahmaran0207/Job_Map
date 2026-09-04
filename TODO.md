@@ -6,7 +6,7 @@
 
 ---
 
-## 0. 다음에 할 것 (2026-09-02 기준)
+## 0. 다음에 할 것 (2026-09-03 기준)
 
 우선순위 순. 각 항목에 필요한 작업이 무엇인지 적혀 있다.
 
@@ -35,24 +35,6 @@ npm run routing:check    # 진단 — 무엇이 왜 안 되는지 알려준다
 
 시작 전 `npm run stats:rent` 로 현재 수치를 확인할 것. 위 숫자는 그 시점 기준이다.
 
-### ② collect.yml — 실거래가 수집 크론으로 교체
-
-현재 `collect.yml` 은 워크넷(채용) 기준으로 작성되어 있다. 실거래가 수집으로 바꿔야 GitHub Actions 크론이 데이터를 실제로 쌓는다.
-
-바꿀 내용:
-- `npm run collect` → `npm run collect:rent`
-- `npm run geocode` → `npm run geocode:buildings`
-- `npm run stats` → `npm run stats:rent`
-- 환경변수에서 `WORKNET_API_KEY` 제거, `MOLIT_API_KEY` 추가
-
-### ③ 딥링크 UI 연결
-
-`src/lib/listing-links.ts` 는 구현 완료. 지도 팝업(`RentMap.tsx`의 `popupHtml`)에 네이버부동산·직방·다방 링크를 붙이면 된다.
-
-주의:
-- `verified: false` 상태 — URL 클릭해서 실제로 뜨는지 확인 후 `true` 로 올릴 것 (`npm run check:deeplinks`)
-- 팝업에서 `buildListingLinks()`를 호출하려면 `listing-links.ts`를 클라이언트 번들에 포함해야 한다 (현재는 서버/스크립트 전용)
-
 ### ④ 건축년도 필터 추가
 
 DB에 `built_year` 가 있고 API 응답에도 `builtYear` 가 내려오고 있다. `FilterPanel.tsx`에 슬라이더만 추가하면 된다. 예: "2000년 이후" 같은 구간 필터.
@@ -70,8 +52,9 @@ DB에 `built_year` 가 있고 API 응답에도 `builtYear` 가 내려오고 있�
 - [x] 지도 UI 1단계 (직선 반경, MapLibre + Next.js) — 2026-08-29
 - [x] 라우팅 엔진 코드 완료 (등시선 + 우아한 폴백) — 2026-08-30
 - [x] Docker 구성 (Valhalla + nginx 인증 프록시) — 2026-08-30
-- [x] 딥링크 빌더 구현 (`src/lib/listing-links.ts`) — 완료, UI 미연결
 - [x] CI 보안 검사 실패 2건 수정 (CodeQL 중복 init, postcss overrides) — 2026-08-30
+- [x] collect.yml — 실거래가 수집 크론으로 교체 — 2026-09-02
+- [x] 딥링크 UI 연결 (`RentMap.tsx` 팝업에 네이버부동산·직방·다방 링크) — 2026-09-03
 
 ---
 
@@ -195,7 +178,6 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 
 ### 남은 작업
 
-- **딥링크 UI 연결** — `src/lib/listing-links.ts` 완성됨. `RentMap.tsx` 팝업에 붙이기만 하면 된다. URL 수동 확인 먼저 (`npm run check:deeplinks`)
 - **건축년도 필터** — DB에 데이터 있음. `FilterPanel.tsx`에 슬라이더 추가
 - 전국 데이터 밀집 지역 클러스터링 검토 (현재 결과 상한 3,000건으로 제어)
 - 동 단위 히트맵 레이어 (건물 핀과 두 층으로)
@@ -203,13 +185,12 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 
 ---
 
-## 6. 매물 검색 딥링크 — 빌더 완료, UI 미연결
+## 6. 매물 검색 딥링크 — 완료 (2026-09-03)
 
-`src/lib/listing-links.ts` 구현 완료. 네이버부동산·직방·다방 URL 빌더, 유형별 서비스 분기, 건물명/지역명 검색어 생성 로직 포함.
+`src/lib/listing-links.ts` 구현 완료. 네이버부동산·직방·다방 URL 빌더, 유형별 서비스 분기, 건물명/지역명 검색어 생성 로직 포함. `RentMap.tsx` 팝업에 링크 버튼 연결됨(`/api/rents`가 `sido`/`sigungu`를 내려주도록 확장).
 
 **남은 것**
-- `npm run check:deeplinks` 로 실제 URL 클릭 확인 → `verified: true` 로 올리기
-- `RentMap.tsx` 팝업에 링크 버튼 추가
+- `npm run check:deeplinks` 로 실제 URL 클릭 확인 → `verified: true` 로 올리기 (아직 미검증)
 - 딥링크 클릭 이벤트 기록 (전환 측정의 기초)
 
 ---

@@ -5,6 +5,8 @@ export interface BuildingPoint {
   id: number;
   name: string | null;
   type: HousingType;
+  sido: string | null;
+  sigungu: string | null;
   dong: string | null;
   lon: number;
   lat: number;
