@@ -44,8 +44,14 @@ setWorkerUrl('/api/maplibre-worker');
 
 interface Props {
   origin: { lon: number; lat: number } | null;
+  /** 2인(교집합) 모드일 때만 — 같이 살 사람의 좌표. */
+  origin2?: { lon: number; lat: number } | null;
   /** 검색에 사용된 통근권. 등시선이거나(정상) 직선 반경이다(엔진 미가동). */
   area: AreaInfo | null;
+  /** 2인 모드일 때만 — origin2 의 통근권. */
+  area2?: AreaInfo | null;
+  /** 2인 모드일 때 실제 건물 필터에 쓰인 두 통근권의 교집합. 이게 있으면 이걸 칠한다. */
+  intersection?: (GeoJSON.Polygon | GeoJSON.MultiPolygon) | null;
   buildings: BuildingPoint[];
   mode: 'wolse' | 'jeonse';
 }
@@ -56,7 +62,7 @@ const BREAKS = {
   jeonse: [10_000, 20_000, 35_000, 60_000],
 } as const;
 
-export default function RentMap({ origin, area, buildings, mode }: Props) {
+export default function RentMap({ origin, origin2, area, area2, intersection, buildings, mode }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
@@ -105,7 +111,7 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         id: 'area-fill',
         type: 'fill',
         source: ORIGIN_SOURCE,
-        filter: ['!=', ['geometry-type'], 'Point'],
+        filter: ['==', ['get', 'role'], 'result'],
         paint: {
           'fill-color': '#22d3ee',
           'fill-opacity': ['case', ['get', 'degraded'], 0.06, 0.12],
@@ -115,12 +121,27 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         id: 'area-line',
         type: 'line',
         source: ORIGIN_SOURCE,
-        filter: ['!=', ['geometry-type'], 'Point'],
+        filter: ['==', ['get', 'role'], 'result'],
         paint: {
           'line-color': '#67e8f9',
           'line-width': ['case', ['get', 'degraded'], 1.5, 2],
           'line-dasharray': ['case', ['get', 'degraded'], ['literal', [3, 2]], ['literal', [1, 0]]],
           'line-opacity': ['case', ['get', 'degraded'], 0.6, 0.9],
+        },
+      });
+
+      // 2인 모드에서 각자의 통근권 외곽선(칠하지 않고 선만) — "왜 이 모양인지"
+      // 근거를 보여준다. 실제 필터에 쓰인 영역(교집합)은 위 area-fill 이 칠한다.
+      map.addLayer({
+        id: 'person-outline',
+        type: 'line',
+        source: ORIGIN_SOURCE,
+        filter: ['in', ['get', 'role'], ['literal', ['outline-a', 'outline-b']]],
+        paint: {
+          'line-color': ['match', ['get', 'role'], 'outline-b', '#e879f9', '#67e8f9'],
+          'line-width': 1.5,
+          'line-dasharray': ['literal', [2, 2]],
+          'line-opacity': 0.6,
         },
       });
 
@@ -167,9 +188,11 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
           'circle-radius': 8,
-          'circle-color': '#22d3ee',
+          // 2인 모드에서 두 사람을 색으로 구분한다 — A(본인)는 기존 시안,
+          // B(같이 살 사람)는 마젠타 계열로 지도 전체 팔레트와 안 겹치게.
+          'circle-color': ['match', ['get', 'role'], 'origin-b', '#e879f9', '#22d3ee'],
           'circle-stroke-width': 3,
-          'circle-stroke-color': '#083344',
+          'circle-stroke-color': ['match', ['get', 'role'], 'origin-b', '#4a044e', '#083344'],
         },
       });
 
@@ -225,18 +248,43 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
       const originSrc = map.getSource(ORIGIN_SOURCE) as GeoJSONSource | undefined;
       if (originSrc) {
         const features: GeoJSON.Feature[] = [];
-        if (area) {
+        // 실제 필터에 쓰인 영역 — 2인 모드면 교집합, 아니면 본인 통근권 그대로.
+        // (1인 모드는 intersection 이 안 내려오므로 area 로 자연스럽게 떨어진다.)
+        const resultGeojson = intersection ?? area?.geojson;
+        if (resultGeojson) {
           features.push({
             type: 'Feature',
-            geometry: area.geojson,
-            properties: { degraded: area.kind === 'radius' },
+            geometry: resultGeojson,
+            properties: { role: 'result', degraded: area?.kind === 'radius' },
+          });
+        }
+        // 2인 모드에서만 각자의 통근권 외곽선을 따로 그린다 — "왜 이 모양인지".
+        if (area2) {
+          if (area) {
+            features.push({
+              type: 'Feature',
+              geometry: area.geojson,
+              properties: { role: 'outline-a' },
+            });
+          }
+          features.push({
+            type: 'Feature',
+            geometry: area2.geojson,
+            properties: { role: 'outline-b' },
           });
         }
         if (origin) {
           features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [origin.lon, origin.lat] },
-            properties: {},
+            properties: { role: 'origin-a' },
+          });
+        }
+        if (origin2) {
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [origin2.lon, origin2.lat] },
+            properties: { role: 'origin-b' },
           });
         }
         originSrc.setData({ type: 'FeatureCollection', features });
@@ -245,16 +293,17 @@ export default function RentMap({ origin, area, buildings, mode }: Props) {
 
     if (readyRef.current) apply();
     else map.once('load', apply);
-  }, [buildings, origin, area, mode]);
+  }, [buildings, origin, origin2, area, area2, intersection, mode]);
 
-  // 통근권이 바뀌면 그 영역이 화면에 들어오게 한다.
+  // 통근권이 바뀌면 그 영역이 화면에 들어오게 한다. 2인 모드면 두 사람의
+  // 통근권을 합친 범위로 맞춰서 교집합이 한쪽에 치우쳐 있어도 둘 다 보인다.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !area) return;
-    const b = boundsOf(area.geojson);
+    const b = mergeBounds(boundsOf(area.geojson), area2 ? boundsOf(area2.geojson) : null);
     if (!b) return;
     map.fitBounds(b, { padding: 56, duration: 700, maxZoom: 15 });
-  }, [area]);
+  }, [area, area2]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
@@ -305,6 +354,19 @@ function boundsOf(
   return [
     [minLon, minLat],
     [maxLon, maxLat],
+  ];
+}
+
+/** 두 경계 상자를 합친다 — 2인 모드에서 두 사람의 통근권을 한 화면에 담는 데 쓴다. */
+function mergeBounds(
+  a: [[number, number], [number, number]] | null,
+  b: [[number, number], [number, number]] | null,
+): [[number, number], [number, number]] | null {
+  if (!a) return b;
+  if (!b) return a;
+  return [
+    [Math.min(a[0][0], b[0][0]), Math.min(a[0][1], b[0][1])],
+    [Math.max(a[1][0], b[1][0]), Math.max(a[1][1], b[1][1])],
   ];
 }
 

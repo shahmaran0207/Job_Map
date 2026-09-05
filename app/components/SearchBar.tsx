@@ -6,6 +6,9 @@ import type { GeocodeResponse } from '../lib/types';
 interface Props {
   onResolved: (r: { lon: number; lat: number; address: string | null }) => void;
   disabled: boolean;
+  /** 2인 모드에서 두 번째 검색창을 같은 페이지에 띄울 때 id/label을 구분하기 위함. */
+  id?: string;
+  label?: string;
 }
 
 /**
@@ -16,7 +19,7 @@ interface Props {
  *
  * Kakao REST 키는 서버 라우트에만 있다. 이 컴포넌트는 /api/geocode 만 호출한다.
  */
-export default function SearchBar({ onResolved, disabled }: Props) {
+export default function SearchBar({ onResolved, disabled, id = 'workplace', label = '직장 위치' }: Props) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,12 +56,12 @@ export default function SearchBar({ onResolved, disabled }: Props) {
 
   return (
     <form onSubmit={submit}>
-      <label htmlFor="workplace" className="mb-1.5 block font-medium text-neutral-200">
-        직장 위치
+      <label htmlFor={id} className="mb-1.5 block font-medium text-neutral-200">
+        {label}
       </label>
       <div className="flex gap-2">
         <input
-          id="workplace"
+          id={id}
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}

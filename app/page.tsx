@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import FilterPanel from './components/FilterPanel';
+import FilterPanel, { TravelMinutesFields } from './components/FilterPanel';
 import SearchBar from './components/SearchBar';
 import {
   DEFAULT_FILTERS,
@@ -11,6 +11,7 @@ import {
   formatManwon,
   type BuildingPoint,
   type Filters,
+  type PersonB,
   type RentsResponse,
 } from './lib/types';
 
@@ -29,51 +30,76 @@ interface Origin {
 export default function Page() {
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // null = 1인 모드. "+ 같이 살 사람 추가" 를 누르면 origin2/person2 가 채워진다.
+  const [origin2, setOrigin2] = useState<Origin | null>(null);
+  const [person2, setPerson2] = useState<PersonB | null>(null);
   const [data, setData] = useState<RentsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRents = useCallback(async (o: Origin, f: Filters) => {
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams({
-      lon: String(o.lon),
-      lat: String(o.lat),
-      travel: f.travel,
-      minutes: String(f.minutes),
-      mode: f.mode,
-      maxDeposit: String(f.maxDeposit),
-      maxRent: String(f.maxRent),
-      minArea: String(f.minArea),
-      minBuiltYear: String(f.minBuiltYear),
-      types: f.types.join(','),
-      unreliable: f.includeUnreliable ? '1' : '0',
-    });
-    try {
-      const res = await fetch(`/api/rents?${params}`);
-      if (!res.ok) {
-        setError(res.status === 429 ? '요청이 너무 잦습니다.' : '조회에 실패했습니다.');
-        return;
+  const fetchRents = useCallback(
+    async (o: Origin, f: Filters, o2: Origin | null, p2: PersonB | null) => {
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams({
+        lon: String(o.lon),
+        lat: String(o.lat),
+        travel: f.travel,
+        minutes: String(f.minutes),
+        mode: f.mode,
+        maxDeposit: String(f.maxDeposit),
+        maxRent: String(f.maxRent),
+        minArea: String(f.minArea),
+        minBuiltYear: String(f.minBuiltYear),
+        types: f.types.join(','),
+        unreliable: f.includeUnreliable ? '1' : '0',
+      });
+      if (o2 && p2) {
+        params.set('lon2', String(o2.lon));
+        params.set('lat2', String(o2.lat));
+        params.set('travel2', p2.travel);
+        params.set('minutes2', String(p2.minutes));
       }
-      setData(await res.json());
-    } catch {
-      setError('네트워크 오류입니다.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      try {
+        const res = await fetch(`/api/rents?${params}`);
+        if (!res.ok) {
+          setError(res.status === 429 ? '요청이 너무 잦습니다.' : '조회에 실패했습니다.');
+          return;
+        }
+        setData(await res.json());
+      } catch {
+        setError('네트워크 오류입니다.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   // 필터 변경은 슬라이더 드래그로 연속 발생한다. 디바운스로 요청을 합친다.
   useEffect(() => {
     if (!origin) return;
-    const t = setTimeout(() => void fetchRents(origin, filters), 250);
+    const t = setTimeout(() => void fetchRents(origin, filters, origin2, person2), 250);
     return () => clearTimeout(t);
-  }, [origin, filters, fetchRents]);
+  }, [origin, origin2, person2, filters, fetchRents]);
 
   const buildings: BuildingPoint[] = data?.buildings ?? [];
   const area = data?.area ?? null;
+  const area2 = data?.area2 ?? null;
   const degraded = area?.kind === 'radius';
   const summary = useMemo(() => summarize(buildings, filters.mode), [buildings, filters.mode]);
+
+  const togglePerson2 = () => {
+    if (person2) {
+      // 끄면 서버 응답에서 lon2 등이 자동으로 빠져 1인 모드로 완전히 복귀한다.
+      setPerson2(null);
+      setOrigin2(null);
+    } else {
+      // 처음 켤 때는 사람 A와 같은 이동수단/시간으로 시작 — 대개 같이 다니는 걸
+      // 가정하고 시작하는 게 자연스럽고, 필요하면 바로 옆에서 따로 바꿀 수 있다.
+      setPerson2({ travel: filters.travel, minutes: filters.minutes });
+    }
+  };
 
   return (
     <main className="flex h-dvh flex-col md:flex-row">
@@ -113,6 +139,47 @@ export default function Page() {
               {TRAVEL_LABEL[filters.travel]} {filters.minutes}분 이내
               {area?.kind === 'isochrone' && ' (실제 이동 경로 기준)'}
             </div>
+          </div>
+        )}
+
+        {/*
+          커플·룸메이트처럼 직장이 다른 두 사람이 같이 살 곳을 찾는 경우.
+          두 사람의 통근권이 겹치는 지역만 걸러준다 — 각자 계산해서 맞춰보는
+          지금의 대안(수동으로 지도 두 개 겹쳐보기)보다 훨씬 빠르다.
+        */}
+        <button
+          type="button"
+          onClick={togglePerson2}
+          disabled={loading}
+          className="self-start text-[12px] font-medium text-cyan-300/80 underline decoration-cyan-400/40 underline-offset-2 hover:text-cyan-200 disabled:pointer-events-none disabled:opacity-40"
+        >
+          {person2 ? '− 같이 살 사람 빼기' : '+ 같이 살 사람 추가'}
+        </button>
+
+        {person2 && (
+          <div className="space-y-4 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 p-3">
+            <SearchBar
+              id="workplace2"
+              label="같이 살 사람 직장 위치"
+              disabled={loading}
+              onResolved={(r) => setOrigin2(r)}
+            />
+            <TravelMinutesFields
+              travel={person2.travel}
+              minutes={person2.minutes}
+              onTravelChange={(t) => setPerson2({ ...person2, travel: t })}
+              onMinutesChange={(m) => setPerson2({ ...person2, minutes: m })}
+              disabled={loading}
+            />
+            {origin2 && (
+              <div className="rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-2.5 text-[12px] leading-snug text-fuchsia-100">
+                <div className="font-medium">{origin2.address ?? '선택한 위치'}</div>
+                <div className="mt-0.5 text-fuchsia-200/70">
+                  {TRAVEL_LABEL[person2.travel]} {person2.minutes}분 이내
+                  {area2?.kind === 'isochrone' && ' (실제 이동 경로 기준)'}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -158,7 +225,10 @@ export default function Page() {
       <section className="relative min-h-0 flex-1">
         <RentMap
           origin={origin ? { lon: origin.lon, lat: origin.lat } : null}
+          origin2={origin2 && person2 ? { lon: origin2.lon, lat: origin2.lat } : null}
           area={area}
+          area2={area2}
+          intersection={data?.intersection ?? null}
           buildings={buildings}
           mode={filters.mode}
         />
@@ -168,6 +238,19 @@ export default function Page() {
             <p className="rounded-xl border border-cyan-400/20 bg-neutral-950/90 px-5 py-3 text-[13px] font-medium text-neutral-200 shadow-[0_0_40px_-12px_rgba(34,211,238,0.4)]">
               직장 위치를 입력해 주세요
             </p>
+          </div>
+        )}
+
+        {/* 두 사람의 통근권이 아예 안 겹치면 건물이 0개인 이유가 가격 조건이
+            아니라 지리적으로 불가능하다는 걸 명확히 알려야 한다. */}
+        {data?.intersectionEmpty && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-neutral-950/50 backdrop-blur-[1px]">
+            <div className="max-w-xs rounded-xl border border-fuchsia-400/25 bg-neutral-950/90 px-5 py-4 text-center text-[13px] font-medium text-neutral-100 shadow-[0_0_40px_-12px_rgba(232,121,249,0.5)]">
+              두 사람의 통근권이 겹치지 않습니다
+              <div className="mt-1 text-[11px] font-normal text-neutral-400">
+                통근 시간을 늘리거나 이동수단을 바꿔보세요.
+              </div>
+            </div>
           </div>
         )}
 

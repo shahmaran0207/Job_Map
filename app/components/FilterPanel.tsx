@@ -67,48 +67,14 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
         </div>
       </Field>
 
-      <Field label="이동수단">
-        <div className="flex gap-1 rounded-lg border border-neutral-800 bg-neutral-900/60 p-1">
-          {TRAVEL_MODES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              disabled={disabled}
-              onClick={() => set('travel', t)}
-              className={`flex-1 rounded-md px-2 py-1.5 font-medium transition ${
-                filters.travel === t
-                  ? 'bg-cyan-400/15 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.35)]'
-                  : 'text-neutral-400 hover:text-neutral-100'
-              }`}
-            >
-              {TRAVEL_LABEL[t]}
-            </button>
-          ))}
-        </div>
-      </Field>
-
-      <Field
-        label="통근 시간"
-        hint={degraded ? '엔진 미가동 — 직선거리 근사' : undefined}
-      >
-        <div className="flex flex-wrap gap-1.5">
-          {MINUTE_OPTIONS.map((m) => (
-            <button
-              key={m}
-              type="button"
-              disabled={disabled}
-              onClick={() => set('minutes', m)}
-              className={`rounded-md border px-2.5 py-1 tabular-nums transition ${
-                filters.minutes === m
-                  ? 'border-cyan-400/50 bg-cyan-400/10 font-medium text-cyan-200 shadow-[0_0_12px_-4px_rgba(34,211,238,0.7)]'
-                  : 'border-neutral-800 text-neutral-300 hover:border-neutral-700'
-              }`}
-            >
-              {m}분
-            </button>
-          ))}
-        </div>
-      </Field>
+      <TravelMinutesFields
+        travel={filters.travel}
+        minutes={filters.minutes}
+        onTravelChange={(t) => set('travel', t)}
+        onMinutesChange={(m) => set('minutes', m)}
+        disabled={disabled}
+        degraded={degraded}
+      />
 
       <Field label="주택 유형">
         <div className="grid grid-cols-2 gap-1.5">
@@ -208,6 +174,74 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
         </span>
       </label>
     </div>
+  );
+}
+
+/**
+ * "이동수단" + "통근 시간" 버튼 그룹. FilterPanel(사람 A, Filters 연동)과
+ * 2인 모드의 사람 B(page.tsx, 별도 상태 연동) 가 이 컴포넌트를 공유한다.
+ * 이동수단/통근시간은 사람마다 다를 수 있어 Filters 밖으로 뽑아냈다.
+ */
+export function TravelMinutesFields({
+  travel,
+  minutes,
+  onTravelChange,
+  onMinutesChange,
+  disabled,
+  degraded,
+}: {
+  travel: TravelMode;
+  minutes: number;
+  onTravelChange: (t: TravelMode) => void;
+  onMinutesChange: (m: number) => void;
+  disabled: boolean;
+  degraded?: boolean;
+}) {
+  return (
+    <>
+      <Field label="이동수단">
+        <div className="flex gap-1 rounded-lg border border-neutral-800 bg-neutral-900/60 p-1">
+          {TRAVEL_MODES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              disabled={disabled}
+              onClick={() => onTravelChange(t)}
+              className={`flex-1 rounded-md px-2 py-1.5 font-medium transition ${
+                travel === t
+                  ? 'bg-cyan-400/15 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.35)]'
+                  : 'text-neutral-400 hover:text-neutral-100'
+              }`}
+            >
+              {TRAVEL_LABEL[t]}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field
+        label="통근 시간"
+        hint={degraded ? '엔진 미가동 — 직선거리 근사' : undefined}
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {MINUTE_OPTIONS.map((m) => (
+            <button
+              key={m}
+              type="button"
+              disabled={disabled}
+              onClick={() => onMinutesChange(m)}
+              className={`rounded-md border px-2.5 py-1 tabular-nums transition ${
+                minutes === m
+                  ? 'border-cyan-400/50 bg-cyan-400/10 font-medium text-cyan-200 shadow-[0_0_12px_-4px_rgba(34,211,238,0.7)]'
+                  : 'border-neutral-800 text-neutral-300 hover:border-neutral-700'
+              }`}
+            >
+              {m}분
+            </button>
+          ))}
+        </div>
+      </Field>
+    </>
   );
 }
 

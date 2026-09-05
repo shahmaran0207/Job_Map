@@ -45,12 +45,26 @@ export interface AreaInfo {
 
 export interface RentsResponse {
   origin: { lon: number; lat: number };
+  /** 2인(교집합) 모드일 때만. */
+  origin2?: { lon: number; lat: number };
   area: AreaInfo;
+  /** 2인 모드일 때만 — origin2 의 통근권. */
+  area2?: AreaInfo;
+  /** 2인 모드일 때 실제 건물 필터에 쓰인 두 통근권의 교집합. 1인 모드면 null. */
+  intersection: (GeoJSON.Polygon | GeoJSON.MultiPolygon) | null;
+  /** 2인 모드에서 두 통근권이 아예 안 겹치는 경우. */
+  intersectionEmpty?: boolean;
   mode: 'wolse' | 'jeonse';
   window: { sinceYm: string; months: number };
   truncated: boolean;
   count: number;
   buildings: BuildingPoint[];
+}
+
+/** 같이 살 사람(B)의 통근 조건. 가격·유형 등 나머지 필터는 Filters 를 공유한다. */
+export interface PersonB {
+  travel: TravelMode;
+  minutes: number;
 }
 
 export const TRAVEL_LABEL: Record<TravelMode, string> = {

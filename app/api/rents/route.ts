@@ -80,6 +80,48 @@ function circleGeoJson(lon: number, lat: number, radiusM: number): object {
   return { type: 'Polygon', coordinates: [ring] };
 }
 
+/** 등시선 시도 → 실패 시 직선 반경 폴백. 1인/2인 모드 둘 다 이 함수 하나로 처리한다. */
+async function resolveArea(
+  lon: number,
+  lat: number,
+  travel: TravelMode,
+  minutes: number,
+  explicitRadius: number | null,
+): Promise<{ areaGeoJson: object; area: Record<string, unknown> }> {
+  const cell = snapToCell(lon, lat, CELL_SIZE);
+
+  try {
+    const iso = await getIsochrone(lon, lat, travel, minutes);
+    return {
+      areaGeoJson: iso.polygon,
+      area: {
+        kind: 'isochrone',
+        travel,
+        minutes,
+        source: iso.source, // 'cache' 면 엔진을 건드리지 않았다
+      },
+    };
+  } catch (e) {
+    if (!(e instanceof RoutingUnavailableError)) throw e;
+
+    // 엔진이 꺼져 있다. 직선 반경으로 물러서되 사실대로 알린다.
+    const explicit = ALLOWED_RADIUS.find((r) => r === explicitRadius);
+    const radius = explicit ?? Math.round(minutes * FALLBACK_SPEED_M_PER_MIN[travel]);
+    const clamped = Math.min(20_000, Math.max(300, radius));
+    return {
+      areaGeoJson: circleGeoJson(cell.lon, cell.lat, clamped),
+      area: {
+        kind: 'radius',
+        travel,
+        minutes,
+        radius: clamped,
+        // 클라이언트가 "직선거리 근사" 라고 표시하는 근거.
+        degraded: 'routing_engine_unavailable',
+      },
+    };
+  }
+}
+
 export async function GET(req: Request): Promise<NextResponse> {
   const limit = rateLimit(clientKey(req, 'rents'), 20, 2);
   if (!limit.ok) {
@@ -109,6 +151,31 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'invalid_minutes' }, { status: 400 });
   }
 
+  // ── 2인 모드: 같이 살 사람의 직장 좌표(선택) ────────────────────────────────
+  // lon2/lat2 가 둘 다 유효할 때만 2인 모드. 개인정보 취급 원칙은 origin과 동일
+  // (격자 스냅 후에만 사용, 원좌표는 응답에도 로그에도 남기지 않는다).
+  const lon2Raw = p.get('lon2');
+  const lat2Raw = p.get('lat2');
+  let origin2: { lon: number; lat: number; travel: TravelMode; minutes: number } | null = null;
+  if (lon2Raw !== null && lat2Raw !== null) {
+    const lon2 = Number(lon2Raw);
+    const lat2 = Number(lat2Raw);
+    try {
+      assertKoreanCoord(lon2, lat2);
+    } catch {
+      return NextResponse.json({ error: 'invalid_coord2' }, { status: 400 });
+    }
+    const travel2Raw = p.get('travel2') ?? 'transit';
+    const travel2: TravelMode = isTravelMode(travel2Raw) ? travel2Raw : 'transit';
+    let minutes2: number;
+    try {
+      minutes2 = assertAllowedMinutes(Number(p.get('minutes2') ?? 30));
+    } catch {
+      return NextResponse.json({ error: 'invalid_minutes2' }, { status: 400 });
+    }
+    origin2 = { lon: lon2, lat: lat2, travel: travel2, minutes: minutes2 };
+  }
+
   const mode: Mode = p.get('mode') === 'jeonse' ? 'jeonse' : 'wolse';
   const maxDepositManwon = intParam(p.get('maxDeposit'), 0, 0, 2_000_000);
   const maxRentManwon = intParam(p.get('maxRent'), 0, 0, 100_000);
@@ -122,34 +189,63 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   // ── 통근권 영역 결정 ──────────────────────────────────────────────────────
   const cell = snapToCell(lon, lat, CELL_SIZE);
-  let areaGeoJson: object;
-  let area: Record<string, unknown>;
+  const explicitRadius = Number(p.get('radius'));
+  const { areaGeoJson, area } = await resolveArea(lon, lat, travel, minutes, explicitRadius);
 
-  try {
-    const iso = await getIsochrone(lon, lat, travel, minutes);
-    areaGeoJson = iso.polygon;
-    area = {
-      kind: 'isochrone',
-      travel,
-      minutes,
-      source: iso.source, // 'cache' 면 엔진을 건드리지 않았다
-    };
-  } catch (e) {
-    if (!(e instanceof RoutingUnavailableError)) throw e;
+  let cell2: ReturnType<typeof snapToCell> | null = null;
+  let areaGeoJson2: object | null = null;
+  let area2: Record<string, unknown> | null = null;
+  if (origin2) {
+    cell2 = snapToCell(origin2.lon, origin2.lat, CELL_SIZE);
+    const explicitRadius2 = Number(p.get('radius2'));
+    const resolved2 = await resolveArea(
+      origin2.lon,
+      origin2.lat,
+      origin2.travel,
+      origin2.minutes,
+      explicitRadius2,
+    );
+    areaGeoJson2 = resolved2.areaGeoJson;
+    area2 = resolved2.area;
+  }
 
-    // 엔진이 꺼져 있다. 직선 반경으로 물러서되 사실대로 알린다.
-    const explicit = ALLOWED_RADIUS.find((r) => r === Number(p.get('radius')));
-    const radius = explicit ?? Math.round(minutes * FALLBACK_SPEED_M_PER_MIN[travel]);
-    const clamped = Math.min(20_000, Math.max(300, radius));
-    areaGeoJson = circleGeoJson(cell.lon, cell.lat, clamped);
-    area = {
-      kind: 'radius',
-      travel,
-      minutes,
-      radius: clamped,
-      // 클라이언트가 "직선거리 근사" 라고 표시하는 근거.
-      degraded: 'routing_engine_unavailable',
-    };
+  // 2인 모드일 때만 실제 교집합을 계산한다. 1인 모드는 지금과 완전히 동일하게
+  // 동작해야 하므로(회귀 위험 최소화) 이 라운드트립 자체를 건너뛴다.
+  let filterGeoJson = areaGeoJson;
+  let intersectionGeoJson: object | null = null;
+  let intersectionEmpty = false;
+  if (areaGeoJson2) {
+    const intRow = await query<{ geojson: string | null; empty: boolean }>(
+      `SELECT ST_AsGeoJSON(ST_Intersection(a1.g, a2.g)) AS geojson,
+              ST_IsEmpty(ST_Intersection(a1.g, a2.g)) AS empty
+         FROM (SELECT ST_SetSRID(ST_GeomFromGeoJSON($1), 4326) AS g) a1,
+              (SELECT ST_SetSRID(ST_GeomFromGeoJSON($2), 4326) AS g) a2`,
+      [JSON.stringify(areaGeoJson), JSON.stringify(areaGeoJson2)],
+    );
+    const row = intRow[0];
+    intersectionEmpty = row?.empty ?? true;
+    intersectionGeoJson = row?.geojson ? (JSON.parse(row.geojson) as object) : null;
+    filterGeoJson = intersectionGeoJson ?? areaGeoJson;
+  }
+
+  // 교집합이 없으면 건물 조회 자체가 무의미하다 — 조인 비용을 아끼고 바로 반환.
+  if (intersectionEmpty) {
+    return NextResponse.json(
+      {
+        origin: { lon: cell.lon, lat: cell.lat },
+        origin2: cell2 ? { lon: cell2.lon, lat: cell2.lat } : undefined,
+        area: { ...area, geojson: areaGeoJson },
+        area2: area2 ? { ...area2, geojson: areaGeoJson2 } : undefined,
+        intersection: null,
+        intersectionEmpty: true,
+        mode,
+        window: { sinceYm: monthsAgo(MONTHS_WINDOW), months: MONTHS_WINDOW },
+        truncated: false,
+        count: 0,
+        buildings: [],
+      },
+      { headers: { 'Cache-Control': 'no-store, private' } },
+    );
   }
 
   try {
@@ -158,10 +254,13 @@ export async function GET(req: Request): Promise<NextResponse> {
          SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS g
        ),
        area AS (
+         -- 1인 모드면 본인 통근권 폴리곤, 2인 모드면 두 사람 통근권의 교집합
+         -- (filterGeoJson — 위에서 이미 계산됨). 어느 쪽이든 여기서는 폴리곤
+         -- 하나일 뿐이라 쿼리가 갈라지지 않는다.
          SELECT ST_SetSRID(ST_GeomFromGeoJSON($3), 4326)::geography AS g
        ),
        nearby AS (
-         -- 등시선 폴리곤 안의 건물. 점 대 폴리곤이므로 ST_Intersects 가
+         -- 위 area 폴리곤 안의 건물. 점 대 폴리곤이므로 ST_Intersects 가
          -- GiST 인덱스를 그대로 쓴다.
          SELECT b.id, b.name, b.housing_type, b.legal_dong, b.built_year,
                 b.commute_usable, b.geo_precision, b.geom,
@@ -198,7 +297,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         ORDER BY n.dist_m
         LIMIT $11`,
       [
-        cell.lon, cell.lat, JSON.stringify(areaGeoJson),
+        cell.lon, cell.lat, JSON.stringify(filterGeoJson),
         typeFilter, includeUnreliable,
         monthsAgo(MONTHS_WINDOW), mode,
         maxDepositManwon * 10_000, maxRentManwon * 10_000, minArea,
@@ -209,7 +308,11 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json(
       {
         origin: { lon: cell.lon, lat: cell.lat },
+        origin2: cell2 ? { lon: cell2.lon, lat: cell2.lat } : undefined,
         area: { ...area, geojson: areaGeoJson },
+        area2: area2 ? { ...area2, geojson: areaGeoJson2 } : undefined,
+        intersection: intersectionGeoJson,
+        intersectionEmpty: false,
         mode,
         window: { sinceYm: monthsAgo(MONTHS_WINDOW), months: MONTHS_WINDOW },
         truncated: rows.length >= MAX_RESULTS,
