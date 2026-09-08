@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import FilterPanel, { TravelMinutesFields } from './components/FilterPanel';
 import SearchBar from './components/SearchBar';
+import { type Candidate, loadCandidates, removeCandidate, saveCandidate } from './lib/candidates';
 import {
   DEFAULT_FILTERS,
   HOUSING_LABEL_SHORT,
@@ -36,6 +37,12 @@ export default function Page() {
   const [data, setData] = useState<RentsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+
+  // localStorage 는 브라우저 API 라 서버 렌더 시점엔 없다 — 마운트 후에 읽는다.
+  useEffect(() => {
+    setCandidates(loadCandidates());
+  }, []);
 
   const fetchRents = useCallback(
     async (o: Origin, f: Filters, o2: Origin | null, p2: PersonB | null) => {
@@ -99,6 +106,37 @@ export default function Page() {
       // 가정하고 시작하는 게 자연스럽고, 필요하면 바로 옆에서 따로 바꿀 수 있다.
       setPerson2({ travel: filters.travel, minutes: filters.minutes });
     }
+  };
+
+  // 유료 리포트(여러 후보지 비교)로 가기 전 단계 — 지금은 브라우저에만 저장한다.
+  const handleSaveCandidate = () => {
+    if (!origin || !data) return;
+    setCandidates(
+      saveCandidate({
+        origin,
+        origin2: origin2 && person2 ? origin2 : null,
+        person2,
+        filters,
+        summary: {
+          count: summary.count,
+          medDeposit: summary.medDeposit,
+          medRent: summary.medRent,
+        },
+      }),
+    );
+  };
+
+  // 저장된 조건 그대로 되돌린다 — origin/filters 가 바뀌면 기존 useEffect 가
+  // 알아서 재검색하므로 여기서 fetch 를 따로 부를 필요는 없다.
+  const handleLoadCandidate = (c: Candidate) => {
+    setOrigin(c.origin);
+    setOrigin2(c.origin2);
+    setPerson2(c.person2);
+    setFilters(c.filters);
+  };
+
+  const handleRemoveCandidate = (id: string) => {
+    setCandidates(removeCandidate(id));
   };
 
   return (
@@ -213,6 +251,26 @@ export default function Page() {
         )}
 
         <Summary loading={loading} origin={!!origin} data={data} summary={summary} mode={filters.mode} />
+
+        {origin && data && !data.intersectionEmpty && (
+          <button
+            type="button"
+            onClick={handleSaveCandidate}
+            disabled={loading}
+            className="self-start text-[12px] font-medium text-cyan-300/80 underline decoration-cyan-400/40 underline-offset-2 hover:text-cyan-200 disabled:pointer-events-none disabled:opacity-40"
+          >
+            + 이 후보 저장
+          </button>
+        )}
+
+        {candidates.length > 0 && (
+          <CandidateList
+            candidates={candidates}
+            onLoad={handleLoadCandidate}
+            onRemove={handleRemoveCandidate}
+            mode={filters.mode}
+          />
+        )}
 
         <footer className="mt-auto border-t border-neutral-800 pt-4 text-[11px] leading-relaxed text-neutral-300">
           국토교통부 전월세 실거래가 (공공데이터포털) · 최근 {data?.window.months ?? 12}개월 거래
@@ -419,6 +477,65 @@ function Summary({
           결과가 많아 가까운 순으로 일부만 표시했습니다.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * 저장한 후보지 목록. 지금은 카드를 나란히 훑어보는 것으로 "비교" 를 대신한다 —
+ * 결제로 이어질 후보지 비교 리포트의 앞단이라, 무거운 비교 UI를 먼저 만들기보다
+ * 저장/재검색이 되는지부터 검증하는 게 목적이다.
+ */
+function CandidateList({
+  candidates,
+  onLoad,
+  onRemove,
+  mode,
+}: {
+  candidates: Candidate[];
+  onLoad: (c: Candidate) => void;
+  onRemove: (id: string) => void;
+  mode: 'wolse' | 'jeonse';
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 font-medium text-neutral-200">저장한 후보지 {candidates.length}곳</div>
+      <div className="space-y-2">
+        {candidates.map((c) => (
+          <div
+            key={c.id}
+            className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-2.5 text-[12px]"
+          >
+            <div className="text-neutral-100">
+              {c.origin.address ?? '선택한 위치'}
+              {c.origin2 && (
+                <span className="text-fuchsia-200"> + {c.origin2.address ?? '선택한 위치'}</span>
+              )}
+            </div>
+            <div className="mt-0.5 text-neutral-400">
+              건물 {c.summary.count}곳 · 중앙값{' '}
+              {formatManwon(c.summary.medDeposit)}
+              {mode === 'wolse' && c.summary.medRent !== null && ` / ${formatManwon(c.summary.medRent)}`}
+            </div>
+            <div className="mt-1.5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => onLoad(c)}
+                className="text-cyan-300/80 hover:text-cyan-200"
+              >
+                불러오기
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(c.id)}
+                className="text-neutral-500 hover:text-red-300"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
