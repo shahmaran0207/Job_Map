@@ -28,3 +28,4 @@ data/otp/
 /out/
 next-env.d.ts
 *.tsbuildinfo
+
