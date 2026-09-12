@@ -8,7 +8,7 @@
     ],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "types": [
       "node"
     ],
@@ -33,7 +33,8 @@
     "src/**/*.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
