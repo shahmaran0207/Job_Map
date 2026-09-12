@@ -38,6 +38,8 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [showCompare, setShowCompare] = useState(false);
 
   // localStorage 는 브라우저 API 라 서버 렌더 시점엔 없다 — 마운트 후에 읽는다.
   useEffect(() => {
@@ -137,7 +139,25 @@ export default function Page() {
 
   const handleRemoveCandidate = (id: string) => {
     setCandidates(removeCandidate(id));
+    // 삭제된 후보가 비교 선택에 남아있으면 비교 화면이 죽은 데이터를 참조하게 된다.
+    setCompareIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
+
+  const toggleCompare = (id: string) => {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const compareCandidates = candidates.filter((c) => compareIds.has(c.id));
 
   return (
     <main className="flex h-dvh flex-col md:flex-row">
@@ -266,10 +286,22 @@ export default function Page() {
         {candidates.length > 0 && (
           <CandidateList
             candidates={candidates}
+            compareIds={compareIds}
             onLoad={handleLoadCandidate}
             onRemove={handleRemoveCandidate}
+            onToggleCompare={toggleCompare}
             mode={filters.mode}
           />
+        )}
+
+        {compareIds.size >= 2 && (
+          <button
+            type="button"
+            onClick={() => setShowCompare(true)}
+            className="rounded-lg bg-cyan-400/15 px-3 py-2 text-[12px] font-medium text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.35)] hover:bg-cyan-400/25"
+          >
+            선택한 {compareIds.size}개 비교
+          </button>
         )}
 
         <footer className="mt-auto border-t border-neutral-800 pt-4 text-[11px] leading-relaxed text-neutral-300">
@@ -314,6 +346,14 @@ export default function Page() {
 
         {origin && <Legend mode={filters.mode} />}
       </section>
+
+      {showCompare && (
+        <CompareOverlay
+          candidates={compareCandidates}
+          mode={filters.mode}
+          onClose={() => setShowCompare(false)}
+        />
+      )}
     </main>
   );
 }
@@ -488,13 +528,17 @@ function Summary({
  */
 function CandidateList({
   candidates,
+  compareIds,
   onLoad,
   onRemove,
+  onToggleCompare,
   mode,
 }: {
   candidates: Candidate[];
+  compareIds: Set<string>;
   onLoad: (c: Candidate) => void;
   onRemove: (id: string) => void;
+  onToggleCompare: (id: string) => void;
   mode: 'wolse' | 'jeonse';
 }) {
   return (
@@ -506,35 +550,146 @@ function CandidateList({
             key={c.id}
             className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-2.5 text-[12px]"
           >
-            <div className="text-neutral-100">
-              {c.origin.address ?? '선택한 위치'}
-              {c.origin2 && (
-                <span className="text-fuchsia-200"> + {c.origin2.address ?? '선택한 위치'}</span>
-              )}
-            </div>
-            <div className="mt-0.5 text-neutral-400">
-              건물 {c.summary.count}곳 · 중앙값{' '}
-              {formatManwon(c.summary.medDeposit)}
-              {mode === 'wolse' && c.summary.medRent !== null && ` / ${formatManwon(c.summary.medRent)}`}
-            </div>
-            <div className="mt-1.5 flex gap-3">
-              <button
-                type="button"
-                onClick={() => onLoad(c)}
-                className="text-cyan-300/80 hover:text-cyan-200"
-              >
-                불러오기
-              </button>
-              <button
-                type="button"
-                onClick={() => onRemove(c.id)}
-                className="text-neutral-500 hover:text-red-300"
-              >
-                삭제
-              </button>
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={compareIds.has(c.id)}
+                onChange={() => onToggleCompare(c.id)}
+                className="mt-0.5 accent-cyan-400"
+                aria-label="비교에 포함"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-neutral-100">
+                  {c.origin.address ?? '선택한 위치'}
+                  {c.origin2 && (
+                    <span className="text-fuchsia-200"> + {c.origin2.address ?? '선택한 위치'}</span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-neutral-400">
+                  건물 {c.summary.count}곳 · 중앙값{' '}
+                  {formatManwon(c.summary.medDeposit)}
+                  {mode === 'wolse' && c.summary.medRent !== null && ` / ${formatManwon(c.summary.medRent)}`}
+                </div>
+                <div className="mt-1.5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onLoad(c)}
+                    className="text-cyan-300/80 hover:text-cyan-200"
+                  >
+                    불러오기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(c.id)}
+                    className="text-neutral-500 hover:text-red-300"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 저장한 후보지를 열로, 항목을 행으로 나란히 비교한다. 지도/실시간 재조회는
+ * 안 한다 — 저장 시점의 요약값만 보여준다(적정가 진단처럼 다시 계산이 필요한
+ * 건 다음 스텝).
+ */
+function CompareOverlay({
+  candidates,
+  mode,
+  onClose,
+}: {
+  candidates: Candidate[];
+  mode: 'wolse' | 'jeonse';
+  onClose: () => void;
+}) {
+  const rows: { label: string; render: (c: Candidate) => React.ReactNode }[] = [
+    {
+      label: '주소',
+      render: (c) => (
+        <>
+          <div>{c.origin.address ?? '선택한 위치'}</div>
+          {c.origin2 && (
+            <div className="text-fuchsia-300">+ {c.origin2.address ?? '선택한 위치'}</div>
+          )}
+        </>
+      ),
+    },
+    {
+      label: '통근 조건',
+      render: (c) => (
+        <>
+          <div>
+            {TRAVEL_LABEL[c.filters.travel]} {c.filters.minutes}분
+          </div>
+          {c.person2 && (
+            <div className="text-fuchsia-300">
+              {TRAVEL_LABEL[c.person2.travel]} {c.person2.minutes}분
+            </div>
+          )}
+        </>
+      ),
+    },
+    { label: '건물 수', render: (c) => `${c.summary.count}곳` },
+    {
+      label: '중앙값',
+      render: (c) =>
+        `${formatManwon(c.summary.medDeposit)}${
+          mode === 'wolse' && c.summary.medRent !== null
+            ? ` / ${formatManwon(c.summary.medRent)}`
+            : ''
+        }`,
+    },
+    {
+      label: '저장일',
+      render: (c) => new Date(c.savedAt).toLocaleDateString('ko-KR'),
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 p-6 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-full w-full max-w-3xl overflow-auto rounded-2xl border border-cyan-400/20 bg-neutral-950/95 p-5 shadow-[0_0_60px_-15px_rgba(34,211,238,0.4)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-[14px] font-semibold text-neutral-50">
+            후보지 {candidates.length}곳 비교
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[12px] text-neutral-400 hover:text-neutral-100"
+          >
+            닫기 ✕
+          </button>
+        </div>
+
+        <table className="w-full min-w-[480px] border-collapse text-[12px]">
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label} className="border-t border-neutral-800">
+                <th className="w-24 shrink-0 py-2 pr-3 text-left align-top font-medium text-neutral-400">
+                  {row.label}
+                </th>
+                {candidates.map((c) => (
+                  <td key={c.id} className="py-2 pr-4 align-top text-neutral-100">
+                    {row.render(c)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
