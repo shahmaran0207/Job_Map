@@ -56,6 +56,7 @@ Cloudflare Tunnel, Vercel 배포. 자세한 내용은 7번 참고.
 - [x] 모바일 레이아웃 수정 — 사이드바가 `max-h-[45vh]`로 묶여 지도가 화면 밖으로 밀려나지 않음 — 2026-09-05
 - [x] 2인 교집합 통근권 — 커플/룸메이트용, 두 사람 통근권의 PostGIS 교집합으로 건물 필터링 (`/api/rents`, `RentMap.tsx`, `page.tsx`) — 2026-09-05
 - [x] 라우팅 엔진 도보·자차 정상 가동 확인 (`npm run routing:check` ✓walk ✓drive) — 2026-09-08
+- [x] Dependabot #12(minor-and-patch) 머지, #13(next@16) 머지 후 실제 동작 확인 — `tsconfig.json`(jsx: react-jsx) 자동 반영, dev 서버가 Turbopack 기본으로 전환됨, 지도 정상 — 2026-09-12
 - [x] 후보지 저장/불러오기/삭제 — `localStorage` 기반, 결제 없는 v1 (`app/lib/candidates.ts`) — 2026-09-08, `feat/saved-candidates` 브랜치, main 미병합
 
 ---
@@ -257,8 +258,8 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 - 지하철역·버스정류장 데이터 → 역세권 지표
 - 통근권별 주거비 지수 (수익 모델 2번의 기초) — 12개월 시계열 필요
 - 매매 실거래가 추가 → "통근 30분 내 매수 가능 가격대"
-- `next@16` 업그레이드 검토 (현재 postcss overrides 로 막아둔 상태)
 - 단독/다가구 좌표 개선 — 건축물대장 조인 검토
+- `middleware.ts` → `proxy.ts` 컨벤션 마이그레이션 (`npx @next/codemod@canary middleware-to-proxy .`) — next@16이 middleware를 deprecated 취급, 아직 동작은 함
 - `qs`(6.15.3) moderate 취약점 — `shadcn` MCP 도구가 쓰는 개발용 전이 의존성. 상위 패치 아직 없음, 프로덕션 런타임엔 안 들어감. 패치 나오면 `npm audit fix`
 
 ---
