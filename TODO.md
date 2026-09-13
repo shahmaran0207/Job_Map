@@ -10,9 +10,10 @@
 
 우선순위 순. 각 항목에 필요한 작업이 무엇인지 적혀 있다.
 
-### ① 매물 검색 딥링크 URL 재조사 ← 지금 당장
+### ① 네이버부동산 딥링크 URL 사람이 직접 클릭 확인 ← 지금 당장
 
-네이버부동산·직방·다방 3곳 다 URL이 깨져서 버튼을 꺼둔 상태다. 자세한 내용은 6번 참고.
+`npm run check:deeplinks` 로 나온 네이버 URL이 실제로 검색 결과를 보여주는지 확인.
+자동화 브라우저는 봇 차단에 걸려서 사람이 직접 봐야 한다. 자세한 내용은 6번 참고.
 
 ### ② 배포 준비
 
@@ -57,6 +58,7 @@ Cloudflare Tunnel, Vercel 배포. 자세한 내용은 7번 참고.
 - [x] Dependabot #12(minor-and-patch) 머지, #13(next@16) 머지 후 실제 동작 확인 — `tsconfig.json`(jsx: react-jsx) 자동 반영, dev 서버가 Turbopack 기본으로 전환됨, 지도 정상 — 2026-09-12
 - [x] 후보지 저장/불러오기/삭제 — `localStorage` 기반, 결제 없는 v1 (`app/lib/candidates.ts`) — 2026-09-08
 - [x] 후보지 나란히 비교 화면 — 체크박스로 선택, 전체화면 오버레이 테이블 (`app/page.tsx`) — 2026-09-12
+- [x] 딥링크 재조사 1차 — 네이버 새 URL로 교체(사람 검증 대기), 직방·다방은 못 찾음 (`src/lib/listing-links.ts`) — 2026-09-13
 
 ---
 
@@ -204,22 +206,23 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 
 ---
 
-## 6. 매물 검색 딥링크 — 버튼 꺼둠, URL 재조사 필요 (2026-09-04)
+## 6. 매물 검색 딥링크 — 버튼 꺼둠, 재조사 1차 완료 (2026-09-13)
 
-`src/lib/listing-links.ts`, `RentMap.tsx` 팝업 연결 자체는 구현 완료했지만, **`npm run check:deeplinks` 로 나온 URL 3개를 실제 브라우저(Playwright)로 열어서 확인해보니 셋 다 깨져 있었다.**
+`src/lib/listing-links.ts`, `RentMap.tsx` 팝업 연결 자체는 구현 완료했지만, 2026-09-04에
+`npm run check:deeplinks` 로 나온 URL 3개를 실제 브라우저(Playwright)로 열어보니 셋 다
+깨져 있었다. 2026-09-13에 재조사:
 
-| 서비스 | 시도한 URL | 결과 |
+| 서비스 | 상태 | 내용 |
 |---|---|---|
-| 네이버부동산 | `m.land.naver.com/search/result/{검색어}` | 건물명이든 흔한 동명("강남구 개포동")이든 전부 "검색결과가 없습니다". 이 구주소 방식 자체가 죽은 것으로 보임 — 지금은 `fin.land.naver.com` SPA 지도앱으로 이전됨 |
-| 직방 | `zigbang.com/search?q=` | 그 경로 자체가 없음, 404 |
-| 다방 | `dabangapp.com/search?search=` | 파라미터를 안 읽고 홈으로 리다이렉트 |
+| 네이버부동산 | **URL 교체함** | 구주소(`m.land.naver.com/search/result/`)는 죽음 확인. `fin.land.naver.com/search?query={검색어}` 로 바꿨고, 이게 `/map?query=...&search-expanded=true` 로 정상 리다이렉트되는 것까지는 확인. 다만 최종 검색 결과 화면 렌더까지는 자동화 브라우저로 확인 불가 — 네이버가 봇 차단을 거는 것으로 보임(`fin.land.naver.com/` 루트 접속 시 `financial.pstatic.net/404.html`로 우회당함). **사람이 `npm run check:deeplinks` 로 직접 클릭 확인 필요** |
+| 직방 | 새 URL 못 찾음 | 홈페이지에 텍스트 검색창 자체가 없음(카테고리 타일뿐). 검색 진입점이 앱 내 다른 흐름으로 옮겨간 것으로 보임 |
+| 다방 | 새 URL 못 찾음 | 자동화 브라우저로 열면 "일시적으로 서비스가 지연되고 있습니다" 에러가 뜸(봇 차단 추정), 검색창 타이핑도 반응 없음 |
 
-세 사이트 다 검색어 기반 딥링크에서 자체 지도앱/자동완성 흐름으로 바뀐 것으로 보인다. `RentMap.tsx`에 `SHOW_LISTING_LINKS = false` 플래그로 버튼을 꺼뒀다 — 깨진 링크를 사용자에게 보여주는 것보다 안 보여주는 게 낫다.
+세 사이트 다 검색어 기반 딥링크에서 자체 지도앱/봇 차단 강화 쪽으로 바뀐 것으로 보인다. `RentMap.tsx`에 `SHOW_LISTING_LINKS = false` 플래그로 버튼을 계속 꺼둔 상태 — 깨진 링크를 사용자에게 보여주는 것보다 안 보여주는 게 낫다.
 
 **남은 것**
-- 사이트별로 실제 검색 흐름을 다시 조사해서 URL 빌더 교체 (비공식 API라 시간이 걸리고, 또 바뀔 수 있음)
-- 또는 "검색어만 클립보드에 복사" 방식으로 축소하는 것도 검토 (구현 간단, 항상 동작)
-- 고치면 `RentMap.tsx` 의 `SHOW_LISTING_LINKS` 를 `true` 로
+- 네이버 새 URL을 **사람이 직접 클릭해서 검증**(`npm run check:deeplinks`) → 되면 `SHOW_LISTING_LINKS` 를 `true` 로, 일단 네이버만이라도 노출하는 것도 검토(직방·다방은 계속 숨김)
+- 직방·다방은 URL 빌더 방식 자체를 재검토 — 사이트에서 못 찾겠으면 "검색어만 클립보드에 복사" 방식으로 축소 검토(구현 간단, 봇 차단과 무관하게 항상 동작)
 - 딥링크 클릭 이벤트 기록 (전환 측정의 기초) — URL 고친 뒤에
 
 ---
