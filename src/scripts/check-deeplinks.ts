@@ -5,9 +5,10 @@ import { buildListingLinks, buildSearchQuery } from '../lib/listing-links';
 /**
  * 매물 딥링크 확인.
  *
- * 부동산 사이트 URL 형식은 프로그램으로 검증할 수 없다(해당 도메인 fetch 차단).
- * 그래서 실제 데이터로 URL 을 만들어 출력하고, **사람이 클릭해서** 확인한다.
- * 30초면 끝나고, 틀린 게 있으면 `src/lib/listing-links.ts` 의 빌더 한 줄만 고치면 된다.
+ * 검색어 자동 적용 URL은 3사(네이버·직방·다방) 다 없어져서(2026-09-13 실측),
+ * 지금은 "검색어 복사 + 홈 링크"로 동작한다. 이 스크립트는 실제 데이터로
+ * 검색어와 홈 URL을 출력한다 — 홈 URL은 항상 유효하니 검증 대상이 아니고,
+ * 검색어가 건물명/지역명을 정확히 뽑는지가 확인 포인트다.
  *
  * 유형별로 하나씩 뽑는 이유: 유형마다 이름 유무와 노출 서비스가 다르다.
  * 특히 단독다가구(이름 없음)와 연립다세대(이름이 지번 숫자인 경우)가 문제되기 쉽다.
@@ -38,9 +39,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log('실제 데이터로 만든 매물 검색 링크입니다.');
-  console.log('각 URL 을 브라우저에서 열어 정상 동작하는지 확인하세요.');
-  console.log('틀리면 src/lib/listing-links.ts 의 BUILDERS 만 고치면 됩니다.');
+  console.log('실제 데이터로 만든 검색어 + 홈 링크입니다.');
+  console.log('검색어가 건물명/지역명을 정확히 뽑는지만 확인하면 됩니다(홈 URL은 항상 유효).');
   console.log('');
 
   for (const r of rows) {
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     console.log(`   건물: ${r.name ?? '(이름 없음)'} / ${r.sigungu ?? '-'} ${r.legal_dong ?? '-'}`);
     console.log(`   검색어: "${buildSearchQuery(input)}"`);
     for (const link of buildListingLinks(input)) {
-      console.log(`   ${link.label.padEnd(8)} ${link.url}`);
+      console.log(`   ${link.label.padEnd(8)} ${link.homeUrl}`);
     }
     console.log('');
   }

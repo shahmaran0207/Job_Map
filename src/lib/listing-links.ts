@@ -12,9 +12,13 @@ import type { HousingType } from '../collectors/molit-types';
  *   - 수익 모델(부동산 리드)과 같은 구조다. 사용자가 통근권과 예산을 확정한
  *     **직후**의 트래픽이 부동산 업계에서 가장 값이 높다
  *
- * ⚠️ URL 형식은 프로그램으로 검증하지 못했다(해당 도메인 fetch 차단).
- * 그래서 빌더를 여기 한 곳에 모았다. 형식이 바뀌거나 틀렸으면 이 파일만 고치면
- * 된다. `npm run check:deeplinks` 가 실제 URL 을 출력하므로 클릭해서 확인할 것.
+ * ⚠️ 검색어를 URL에 실어 자동 검색시키는 방식은 안 쓴다. 2026-09-04, 2026-09-13
+ * 두 번에 걸쳐 네이버부동산·직방·다방 3곳을 사람이 직접 열어서 확인했는데
+ * 셋 다 검색어를 실제로 적용하지 못했다(네이버는 일반 지도만 뜸, 직방은
+ * "결과 없음", 다방은 홈으로 튕김) — 세 사이트 다 검색어 기반 딥링크
+ * 자체를 없앤 것으로 보인다. 그래서 대신 **검색어를 클립보드에 복사 + 홈
+ * 링크를 새 탭으로 열기**로 축소했다. 사이트 내부 검색 API가 어떻게 바뀌든
+ * "홈페이지가 있고 검색창이 있다"는 사실만 있으면 되므로 계속 동작한다.
  */
 export type ListingProvider = 'naver' | 'zigbang' | 'dabang';
 
@@ -31,9 +35,10 @@ export interface ListingLinkInput {
 export interface ListingLink {
   provider: ListingProvider;
   label: string;
-  url: string;
-  /** 이 URL 형식을 사람이 클릭해 확인했는가. check:deeplinks 로 검증 후 true 로 올린다. */
-  verified: boolean;
+  /** 새 탭으로 열 홈/앱 URL. 검색 결과 페이지가 아니라 홈이다. */
+  homeUrl: string;
+  /** 클립보드에 복사해서 사용자가 그 사이트 검색창에 직접 붙여넣을 검색어. */
+  query: string;
 }
 
 const PROVIDER_LABEL: Record<ListingProvider, string> = {
@@ -58,24 +63,11 @@ export function buildSearchQuery(input: ListingLinkInput): string {
   return region || [input.sido, input.sigungu].filter(Boolean).join(' ');
 }
 
-/**
- * 서비스별 URL 빌더.
- *
- * 지도 상태(좌표·줌)를 URL 에 담는 방식은 서비스가 바뀔 때 가장 먼저 깨진다.
- * 그래서 **검색어 기반**을 택했다. 정밀도는 조금 낮지만 훨씬 오래 간다.
- */
-const BUILDERS: Record<ListingProvider, (q: string) => string> = {
-  // 2026-09-04에 죽은 걸 확인한 구주소(m.land.naver.com/search/result/)를
-  // 2026-09-13에 새 주소로 교체. fin.land.naver.com/search?query= 로 들어가면
-  // /map?query=...&search-expanded=true 로 정상 리다이렉트되는 것까지는 확인함
-  // (아직 사람이 실제로 열어서 검색 결과가 뜨는지는 미검증 — 자동화 브라우저로는
-  // 네이버 쪽 봇 차단에 걸려 확인 불가. check:deeplinks 로 직접 클릭해서 볼 것).
-  naver: (q) => `https://fin.land.naver.com/search?query=${encodeURIComponent(q)}`,
-  // 직방/다방은 재조사에서도 새 URL을 못 찾았다 — 직방은 홈페이지에 텍스트
-  // 검색창 자체가 없고(카테고리 타일뿐), 다방은 자동화 브라우저에 "서비스
-  // 지연" 에러를 띄운다(봇 차단 추정). SHOW_LISTING_LINKS 로 계속 꺼둔 상태.
-  zigbang: (q) => `https://www.zigbang.com/search?q=${encodeURIComponent(q)}`,
-  dabang: (q) => `https://www.dabangapp.com/search?search=${encodeURIComponent(q)}`,
+/** 서비스별 홈/앱 URL. 검색어를 안 실으므로 항상 유효하다. */
+const HOME_URLS: Record<ListingProvider, string> = {
+  naver: 'https://fin.land.naver.com/',
+  zigbang: 'https://www.zigbang.com/',
+  dabang: 'https://www.dabangapp.com/',
 };
 
 /**
@@ -96,19 +88,18 @@ export function buildListingLinks(input: ListingLinkInput): ListingLink[] {
   return PROVIDERS_BY_TYPE[input.housingType].map((provider) => ({
     provider,
     label: PROVIDER_LABEL[provider],
-    url: BUILDERS[provider](q),
-    // 클릭 확인 전까지 false. check:deeplinks 참고.
-    verified: false,
+    homeUrl: HOME_URLS[provider],
+    query: q,
   }));
 }
 
 /** 진단 스크립트가 쓰는 전체 목록. */
 export function allProviders(): ListingProvider[] {
-  return Object.keys(BUILDERS) as ListingProvider[];
+  return Object.keys(HOME_URLS) as ListingProvider[];
 }
 
-export function buildFor(provider: ListingProvider, query: string): string {
-  return BUILDERS[provider](query);
+export function homeUrlFor(provider: ListingProvider): string {
+  return HOME_URLS[provider];
 }
 
 export function providerLabel(provider: ListingProvider): string {

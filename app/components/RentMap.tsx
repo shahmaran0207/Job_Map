@@ -32,9 +32,9 @@ const TILE_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const SOURCE_ID = 'buildings';
 const ORIGIN_SOURCE = 'origin';
 
-// 매물 검색 딥링크 버튼. 3개 사이트 URL이 전부 깨져 있어 꺼둔 상태다.
-// TODO.md 6장 참고 — 재조사 후 다시 켤 것.
-const SHOW_LISTING_LINKS = false;
+// 매물 검색 딥링크 버튼. 검색어 자동 적용 URL은 3사 다 없어져서(TODO.md 6장),
+// "검색어 복사 + 홈 열기" 방식으로 켜둔 상태. popupHtml() 참고.
+const SHOW_LISTING_LINKS = true;
 
 // MapLibre는 워커 스크립트 위치를 import.meta.url로 자동 계산하는데, webpack
 // 번들 안에서는 그 값이 실제 URL이 아니라서 워커가 빈 URL로 뜬다 — 결국 현재
@@ -213,6 +213,7 @@ export default function RentMap({ origin, origin2, area, area2, intersection, bu
             .setLngLat((f.geometry as Point).coordinates as [number, number])
             .setHTML(popupHtml(f.properties as Record<string, unknown>, modeRef.current))
             .addTo(map);
+          attachListingCopyHandlers(popup.getElement());
         });
       }
     });
@@ -378,6 +379,36 @@ function esc(s: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * popupHtml() 이 심어둔 `.listing-copy-btn` 에 클릭 리스너를 붙인다.
+ *
+ * 팝업은 매번 setHTML() 로 통째로 새로 그려지므로, 클릭할 때마다 다시
+ * 불러서 새 DOM에 다시 붙여야 한다. 인라인 onclick="" 을 안 쓰는 이유는
+ * CSP(script-src에 nonce만 있고 unsafe-inline 없음)가 그걸 막기 때문이다.
+ */
+function attachListingCopyHandlers(el: HTMLElement | undefined): void {
+  if (!el) return;
+  el.querySelectorAll<HTMLButtonElement>('.listing-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const query = btn.dataset.query ?? '';
+      const home = btn.dataset.home ?? '';
+      const label = btn.dataset.label ?? '';
+      navigator.clipboard
+        .writeText(query)
+        .then(() => {
+          btn.textContent = '복사됨 ✓';
+          setTimeout(() => {
+            btn.textContent = label;
+          }, 1500);
+        })
+        .catch(() => {
+          // 클립보드 권한이 없어도 홈은 열어준다 — 사용자가 검색어를 직접 타이핑하면 된다.
+        });
+      window.open(home, '_blank', 'noopener,noreferrer');
+    });
+  });
+}
+
 function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string {
   const type = HOUSING_LABEL_SHORT[p.type as keyof typeof HOUSING_LABEL_SHORT] ?? String(p.type);
   const name = p.name ? esc(p.name) : `${esc(p.dong)} ${type}`;
@@ -395,11 +426,12 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
        </div>`;
 
   // 실거래가는 과거 거래 기록이지 지금 나와 있는 매물이 아니다. 지역·건물을
-  // 좁혀준 뒤 실제 매물 검색은 부동산 서비스로 넘긴다 — 다만 지금은 꺼져 있다.
-  // 2026-09-04에 실제 브라우저로 확인해보니 네이버부동산·직방·다방 URL 빌더
-  // 3개가 전부 깨져 있었다(사이트들이 검색어 기반 딥링크에서 자체 지도앱/
-  // 자동완성 흐름으로 바뀐 걸로 보임). listing-links.ts는 그대로 두고 버튼만
-  // 숨긴다 — TODO.md 6장에 원인과 재조사 항목을 남겨뒀다.
+  // 좁혀준 뒤 실제 매물 검색은 부동산 서비스로 넘긴다. 검색어를 URL에 실어
+  // 자동 적용시키는 방식은 3사(네이버·직방·다방) 다 막혀서(TODO.md 6장,
+  // 2026-09-13 실측) 버튼을 누르면 검색어를 클립보드에 복사하고 홈을 새 탭으로
+  // 연다 — 실제 클립보드 접근·새 탭 열기는 CSP상 인라인 스크립트를 못 쓰므로
+  // data-* 속성만 심어두고, 클릭 리스너는 아래 map.on('click', ...) 안에서
+  // 진짜 JS로 붙인다(popupHtml 자체는 정적 HTML 문자열이라 이벤트를 못 붙임).
   const links = SHOW_LISTING_LINKS
     ? buildListingLinks({
         name: p.name as string | null,
@@ -415,10 +447,10 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
          ${links
            .map(
              (l) =>
-               `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
-                   class="rounded bg-cyan-400/10 px-1.5 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-400/20">
+               `<button type="button" class="listing-copy-btn rounded bg-cyan-400/10 px-1.5 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-400/20"
+                   data-query="${esc(l.query)}" data-home="${esc(l.homeUrl)}" data-label="${esc(l.label)}">
                   ${esc(l.label)}
-                </a>`,
+                </button>`,
            )
            .join('')}
        </div>`
