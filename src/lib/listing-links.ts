@@ -65,7 +65,15 @@ export function buildSearchQuery(input: ListingLinkInput): string {
  * 그래서 **검색어 기반**을 택했다. 정밀도는 조금 낮지만 훨씬 오래 간다.
  */
 const BUILDERS: Record<ListingProvider, (q: string) => string> = {
-  naver: (q) => `https://m.land.naver.com/search/result/${encodeURIComponent(q)}`,
+  // 2026-09-04에 죽은 걸 확인한 구주소(m.land.naver.com/search/result/)를
+  // 2026-09-13에 새 주소로 교체. fin.land.naver.com/search?query= 로 들어가면
+  // /map?query=...&search-expanded=true 로 정상 리다이렉트되는 것까지는 확인함
+  // (아직 사람이 실제로 열어서 검색 결과가 뜨는지는 미검증 — 자동화 브라우저로는
+  // 네이버 쪽 봇 차단에 걸려 확인 불가. check:deeplinks 로 직접 클릭해서 볼 것).
+  naver: (q) => `https://fin.land.naver.com/search?query=${encodeURIComponent(q)}`,
+  // 직방/다방은 재조사에서도 새 URL을 못 찾았다 — 직방은 홈페이지에 텍스트
+  // 검색창 자체가 없고(카테고리 타일뿐), 다방은 자동화 브라우저에 "서비스
+  // 지연" 에러를 띄운다(봇 차단 추정). SHOW_LISTING_LINKS 로 계속 꺼둔 상태.
   zigbang: (q) => `https://www.zigbang.com/search?q=${encodeURIComponent(q)}`,
   dabang: (q) => `https://www.dabangapp.com/search?search=${encodeURIComponent(q)}`,
 };
