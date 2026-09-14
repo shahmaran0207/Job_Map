@@ -97,11 +97,11 @@ services:
       - ../data/otp:/var/opentripplanner
     command: ['--load', '--serve']
     environment:
-      JAVA_TOOL_OPTIONS: '-Xmx12g'
+      JAVA_TOOL_OPTIONS: '-Xmx3g'
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     deploy:
       resources:
         limits:
-          memory: 14g
+          memory: 4g

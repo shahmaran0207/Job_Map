@@ -55,6 +55,9 @@ export default function Page() {
         lat: String(o.lat),
         travel: f.travel,
         minutes: String(f.minutes),
+        depDay: String(f.depDay),
+        depHour: String(f.depHour),
+        depMinute: String(f.depMinute),
         mode: f.mode,
         maxDeposit: String(f.maxDeposit),
         maxRent: String(f.maxRent),
@@ -68,6 +71,9 @@ export default function Page() {
         params.set('lat2', String(o2.lat));
         params.set('travel2', p2.travel);
         params.set('minutes2', String(p2.minutes));
+        params.set('depDay2', String(p2.depDay));
+        params.set('depHour2', String(p2.depHour));
+        params.set('depMinute2', String(p2.depMinute));
       }
       try {
         const res = await fetch(`/api/rents?${params}`);
@@ -106,7 +112,13 @@ export default function Page() {
     } else {
       // 처음 켤 때는 사람 A와 같은 이동수단/시간으로 시작 — 대개 같이 다니는 걸
       // 가정하고 시작하는 게 자연스럽고, 필요하면 바로 옆에서 따로 바꿀 수 있다.
-      setPerson2({ travel: filters.travel, minutes: filters.minutes });
+      setPerson2({
+        travel: filters.travel,
+        minutes: filters.minutes,
+        depDay: filters.depDay,
+        depHour: filters.depHour,
+        depMinute: filters.depMinute,
+      });
     }
   };
 
@@ -225,8 +237,12 @@ export default function Page() {
             <TravelMinutesFields
               travel={person2.travel}
               minutes={person2.minutes}
+              depDay={person2.depDay}
+              depHour={person2.depHour}
+              depMinute={person2.depMinute}
               onTravelChange={(t) => setPerson2({ ...person2, travel: t })}
               onMinutesChange={(m) => setPerson2({ ...person2, minutes: m })}
+              onDepartureChange={(d) => setPerson2({ ...person2, ...d })}
               disabled={loading}
             />
             {origin2 && (

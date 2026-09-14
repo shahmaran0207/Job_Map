@@ -3,7 +3,7 @@ import { query } from '../../../src/lib/db';
 import { snapToCell } from '../../../src/lib/grid';
 import { RoutingUnavailableError, getIsochrone } from '../../../src/lib/isochrone';
 import { clientKey, rateLimit } from '../../../src/lib/rate-limit';
-import { assertAllowedMinutes, type TravelMode } from '../../../src/lib/routing';
+import { assertAllowedMinutes, type TravelMode, type TransitDeparture } from '../../../src/lib/routing';
 import { assertKoreanCoord } from '../../../src/lib/security';
 import { HOUSING_TYPES, type HousingType } from '../../../src/collectors/molit-types';
 
@@ -67,6 +67,18 @@ function isTravelMode(v: string): v is TravelMode {
   return v === 'walk' || v === 'transit' || v === 'drive';
 }
 
+/**
+ * 대중교통 출발 시각을 쿼리에서 읽는다. 유연근무가 흔해서 기본값을 강제하지
+ * 않고 사용자가 직접 고르지만, 값이 없으면(구버전 클라이언트 등) 안전한
+ * 기본값(다음 평일 오전 8시)으로 물러선다.
+ */
+function parseDeparture(p: URLSearchParams, suffix: string): TransitDeparture {
+  const day = intParam(p.get(`depDay${suffix}`), 1, 0, 6);
+  const hour = intParam(p.get(`depHour${suffix}`), 8, 0, 23);
+  const minute = intParam(p.get(`depMinute${suffix}`), 0, 0, 59);
+  return { dayOfWeek: day as TransitDeparture['dayOfWeek'], hour, minute };
+}
+
 /** 반경 원을 폴리곤 GeoJSON 으로. 위도에 따른 경도 축소를 반영한다. */
 function circleGeoJson(lon: number, lat: number, radiusM: number): object {
   const steps = 64;
@@ -87,11 +99,12 @@ async function resolveArea(
   travel: TravelMode,
   minutes: number,
   explicitRadius: number | null,
+  departure?: TransitDeparture,
 ): Promise<{ areaGeoJson: object; area: Record<string, unknown> }> {
   const cell = snapToCell(lon, lat, CELL_SIZE);
 
   try {
-    const iso = await getIsochrone(lon, lat, travel, minutes);
+    const iso = await getIsochrone(lon, lat, travel, minutes, departure);
     return {
       areaGeoJson: iso.polygon,
       area: {
@@ -190,7 +203,15 @@ export async function GET(req: Request): Promise<NextResponse> {
   // ── 통근권 영역 결정 ──────────────────────────────────────────────────────
   const cell = snapToCell(lon, lat, CELL_SIZE);
   const explicitRadius = Number(p.get('radius'));
-  const { areaGeoJson, area } = await resolveArea(lon, lat, travel, minutes, explicitRadius);
+  const departure = travel === 'transit' ? parseDeparture(p, '') : undefined;
+  const { areaGeoJson, area } = await resolveArea(
+    lon,
+    lat,
+    travel,
+    minutes,
+    explicitRadius,
+    departure,
+  );
 
   let cell2: ReturnType<typeof snapToCell> | null = null;
   let areaGeoJson2: object | null = null;
@@ -198,12 +219,14 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (origin2) {
     cell2 = snapToCell(origin2.lon, origin2.lat, CELL_SIZE);
     const explicitRadius2 = Number(p.get('radius2'));
+    const departure2 = origin2.travel === 'transit' ? parseDeparture(p, '2') : undefined;
     const resolved2 = await resolveArea(
       origin2.lon,
       origin2.lat,
       origin2.travel,
       origin2.minutes,
       explicitRadius2,
+      departure2,
     );
     areaGeoJson2 = resolved2.areaGeoJson;
     area2 = resolved2.area;

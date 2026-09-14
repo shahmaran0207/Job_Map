@@ -22,6 +22,38 @@ function isLocalRoutingHost(hostname: string): boolean {
 
 export type TravelMode = 'walk' | 'transit' | 'drive';
 
+/**
+ * 대중교통 출발 시각. 도보/자차와 달리 시간표 기반이라 결과가 출발 시각에 따라
+ * 달라진다. 유연근무가 흔해져서 고정 시각(예: "평일 오전 8시")을 강제하지 않고
+ * 사용자가 직접 고르게 한다.
+ *
+ * dayOfWeek 는 JS Date.getDay() 와 동일하게 0=일요일 ~ 6=토요일.
+ */
+export interface TransitDeparture {
+  dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  hour: number;
+  minute: number;
+}
+
+/** dayOfWeek 에 해당하는 가장 가까운 미래(오늘 포함) 날짜를 yyyy-MM-dd 로. */
+function nextDateForWeekday(dayOfWeek: number): string {
+  const now = new Date();
+  const diff = (dayOfWeek - now.getDay() + 7) % 7;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** 출발 시각을 KST 오프셋 ISO 문자열로. OTP2 TravelTime API 가 요구하는 형식이다. */
+function departureToIso(departure: TransitDeparture): string {
+  const date = nextDateForWeekday(departure.dayOfWeek);
+  const hh = String(departure.hour).padStart(2, '0');
+  const mm = String(departure.minute).padStart(2, '0');
+  return `${date}T${hh}:${mm}:00+09:00`;
+}
+
 /** 사용자가 지정할 수 있는 통근 시간 상한. 임의 값을 허용하면 엔진을 태울 수 있다. */
 const ALLOWED_MINUTES = [10, 15, 20, 30, 45, 60, 90] as const;
 export type AllowedMinutes = (typeof ALLOWED_MINUTES)[number];
@@ -60,6 +92,7 @@ export async function isochrone(
   lat: number,
   mode: TravelMode,
   minutes: number,
+  departure?: TransitDeparture,
 ): Promise<IsochronePolygon> {
   // 사용자 입력 좌표를 그대로 엔진에 넘기지 않는다.
   assertKoreanCoord(lon, lat);
@@ -67,32 +100,50 @@ export async function isochrone(
 
   const { url, token } = requireRouting();
   const isTransit = mode === 'transit';
-  const endpoint = isTransit ? `${url}/otp/isochrone` : `${url}/valhalla/isochrone`;
-
-  const body = isTransit
-    ? JSON.stringify({ lon, lat, cutoff: `${mins}m` })
-    : JSON.stringify({
-        locations: [{ lon, lat }],
-        costing: mode === 'walk' ? 'pedestrian' : 'auto',
-        contours: [{ time: mins }],
-        polygons: true,
-        denoise: 0.4,
-        generalize: 50,
-      });
 
   const timeoutMs = isLocalRoutingHost(new URL(url).hostname)
     ? LOCAL_ROUTING_TIMEOUT_MS
     : REMOTE_ROUTING_TIMEOUT_MS;
 
-  const res = await safeFetch(endpoint, {
-    method: 'POST',
-    body,
-    allowHosts: [new URL(url).hostname],
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    maxRedirects: 0,
-    maxBytes: 8 * 1024 * 1024,
-    timeoutMs,
-  });
+  let res: Awaited<ReturnType<typeof safeFetch>>;
+
+  if (isTransit) {
+    if (!departure) throw new Error('대중교통 모드는 출발 시각(departure)이 필요합니다');
+    // OTP2 TravelTime 샌드박스 API — GET + 쿼리스트링만 받는다. POST JSON 이
+    // 아니다. time 은 ISO 오프셋 형식만 파싱된다("8:00am" 등은 405/500 을 낸다).
+    const qs = new URLSearchParams({
+      location: `${lat},${lon}`,
+      time: departureToIso(departure),
+      modes: 'WALK,TRANSIT',
+      cutoff: `${mins}M`,
+    });
+    res = await safeFetch(`${url}/otp/isochrone?${qs.toString()}`, {
+      method: 'GET',
+      allowHosts: [new URL(url).hostname],
+      headers: { Authorization: `Bearer ${token}` },
+      maxRedirects: 0,
+      maxBytes: 8 * 1024 * 1024,
+      timeoutMs,
+    });
+  } else {
+    const body = JSON.stringify({
+      locations: [{ lon, lat }],
+      costing: mode === 'walk' ? 'pedestrian' : 'auto',
+      contours: [{ time: mins }],
+      polygons: true,
+      denoise: 0.4,
+      generalize: 50,
+    });
+    res = await safeFetch(`${url}/valhalla/isochrone`, {
+      method: 'POST',
+      body,
+      allowHosts: [new URL(url).hostname],
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      maxRedirects: 0,
+      maxBytes: 8 * 1024 * 1024,
+      timeoutMs,
+    });
+  }
 
   if (res.status === 401) throw new Error('라우팅 프록시 인증 실패 (ROUTING_TOKEN 불일치)');
   if (res.status === 429) throw new Error('라우팅 요청이 레이트리밋에 걸렸습니다');

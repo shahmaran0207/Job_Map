@@ -8,8 +8,13 @@ import { isochrone, type TravelMode } from '../lib/routing';
  *
  * 다른 진단 스크립트와 같은 역할이다. "안 된다" 를 "무엇이 왜 안 된다" 로 바꾼다.
  * 엔진은 개발 PC Docker 위에 있어 상태가 자주 바뀌므로 이게 특히 유용하다.
+ *
+ * 대중교통(OTP2) 그래프는 지금 부산/경남만 커버한다(전국 그래프는 이 PC
+ * 메모리로 빌드 불가 — TODO.md 4번 참고). 그래서 프로브 좌표도 그 범위
+ * 안(부산역)으로 잡는다. 서울 등 커버리지 밖 좌표는 전부 404 가 정상이다.
  */
-const PROBE = { lon: 127.0276, lat: 37.4979, label: '서울 강남역' };
+const PROBE = { lon: 129.0403, lat: 35.1156, label: '부산역' };
+const TRANSIT_DEPARTURE = { dayOfWeek: 1 as const, hour: 8, minute: 0 };
 
 async function main(): Promise<void> {
   console.log('── 설정 ────────────────────────────────────');
@@ -38,7 +43,13 @@ async function main(): Promise<void> {
   for (const mode of modes) {
     const started = Date.now();
     try {
-      const poly = await isochrone(PROBE.lon, PROBE.lat, mode, 30);
+      const poly = await isochrone(
+        PROBE.lon,
+        PROBE.lat,
+        mode,
+        30,
+        mode === 'transit' ? TRANSIT_DEPARTURE : undefined,
+      );
       const points = poly.coordinates.reduce(
         (n, p) => n + p.reduce((m, ring) => m + ring.length, 0),
         0,
@@ -52,7 +63,7 @@ async function main(): Promise<void> {
       const msg = e instanceof Error ? e.message : String(e);
       console.log(`✗ ${mode.padEnd(8)} ${msg.slice(0, 120)}`);
       if (mode === 'transit') {
-        console.log('           (대중교통은 OTP2 + GTFS 가 필요합니다. 아직 미구성이면 정상입니다)');
+        console.log('           (transit 프로필로 otp 컨테이너가 떠 있는지 확인: npm run routing:up:transit)');
       }
     }
   }

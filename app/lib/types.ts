@@ -65,7 +65,16 @@ export interface RentsResponse {
 export interface PersonB {
   travel: TravelMode;
   minutes: number;
+  /** 대중교통일 때만 의미 있음. 0=일 ~ 6=토 (Date.getDay 기준) */
+  depDay: number;
+  depHour: number;
+  depMinute: number;
 }
+
+/** 대중교통 출발 시각 기본값. 유연근무가 흔해서 "다음 평일 오전 8시" 정도의 평범한 값. */
+export const DEFAULT_DEPARTURE = { depDay: 1, depHour: 8, depMinute: 0 };
+
+export const WEEKDAY_LABEL = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
 export const TRAVEL_LABEL: Record<TravelMode, string> = {
   walk: '도보',
@@ -89,6 +98,10 @@ export interface GeocodeResponse {
 export interface Filters {
   travel: TravelMode;
   minutes: number;
+  /** 대중교통일 때만 의미 있음. 0=일 ~ 6=토 (Date.getDay 기준) */
+  depDay: number;
+  depHour: number;
+  depMinute: number;
   mode: 'wolse' | 'jeonse';
   /** 만원 단위. 0 = 제한 없음 */
   maxDeposit: number;
@@ -103,6 +116,7 @@ export interface Filters {
 export const DEFAULT_FILTERS: Filters = {
   travel: 'transit',
   minutes: 30,
+  ...DEFAULT_DEPARTURE,
   mode: 'wolse',
   maxDeposit: 0,
   maxRent: 0,

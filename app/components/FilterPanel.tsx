@@ -5,6 +5,7 @@ import {
   HOUSING_LABEL_SHORT,
   MINUTE_OPTIONS,
   TRAVEL_LABEL,
+  WEEKDAY_LABEL,
   formatManwon,
   type Filters,
   type TravelMode,
@@ -70,8 +71,12 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
       <TravelMinutesFields
         travel={filters.travel}
         minutes={filters.minutes}
+        depDay={filters.depDay}
+        depHour={filters.depHour}
+        depMinute={filters.depMinute}
         onTravelChange={(t) => set('travel', t)}
         onMinutesChange={(m) => set('minutes', m)}
+        onDepartureChange={(d) => onChange({ ...filters, ...d })}
         disabled={disabled}
         degraded={degraded}
       />
@@ -185,15 +190,23 @@ export default function FilterPanel({ filters, onChange, disabled, degraded }: P
 export function TravelMinutesFields({
   travel,
   minutes,
+  depDay,
+  depHour,
+  depMinute,
   onTravelChange,
   onMinutesChange,
+  onDepartureChange,
   disabled,
   degraded,
 }: {
   travel: TravelMode;
   minutes: number;
+  depDay: number;
+  depHour: number;
+  depMinute: number;
   onTravelChange: (t: TravelMode) => void;
   onMinutesChange: (m: number) => void;
+  onDepartureChange: (d: { depDay: number; depHour: number; depMinute: number }) => void;
   disabled: boolean;
   degraded?: boolean;
 }) {
@@ -218,6 +231,60 @@ export function TravelMinutesFields({
           ))}
         </div>
       </Field>
+
+      {/*
+        대중교통은 시간표 기반이라 도보/자차와 달리 출발 요일/시각에 따라
+        결과가 달라진다. 유연근무가 흔해져서 "평일 오전 8시"로 고정하지 않고
+        직접 고르게 한다.
+      */}
+      {travel === 'transit' && (
+        <Field label="출발 시각">
+          <div className="flex gap-1.5">
+            <select
+              value={depDay}
+              disabled={disabled}
+              onChange={(e) =>
+                onDepartureChange({ depDay: Number(e.target.value), depHour, depMinute })
+              }
+              className="rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-neutral-200"
+            >
+              {WEEKDAY_LABEL.map((label, day) => (
+                <option key={day} value={day}>
+                  {label}요일
+                </option>
+              ))}
+            </select>
+            <select
+              value={depHour}
+              disabled={disabled}
+              onChange={(e) =>
+                onDepartureChange({ depDay, depHour: Number(e.target.value), depMinute })
+              }
+              className="rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-neutral-200"
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>
+                  {h}시
+                </option>
+              ))}
+            </select>
+            <select
+              value={depMinute}
+              disabled={disabled}
+              onChange={(e) =>
+                onDepartureChange({ depDay, depHour, depMinute: Number(e.target.value) })
+              }
+              className="rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-neutral-200"
+            >
+              {[0, 10, 20, 30, 40, 50].map((m) => (
+                <option key={m} value={m}>
+                  {String(m).padStart(2, '0')}분
+                </option>
+              ))}
+            </select>
+          </div>
+        </Field>
+      )}
 
       <Field
         label="통근 시간"

@@ -79,7 +79,10 @@ server {
 
     location = /otp/isochrone {
         set $otp http://otp:8080;
-        proxy_pass $otp/otp/traveltime/isochrone;
+        # 대중교통 등시선은 GET 쿼리스트링(location/time/modes/cutoff)으로 요청을
+        # 받는다. proxy_pass 에 고정 URI 를 쓰면 nginx 가 원래 쿼리스트링을
+        # 자동으로 붙여주지 않으므로 $is_args$args 로 명시해야 한다.
+        proxy_pass $otp/otp/traveltime/isochrone$is_args$args;
         include /etc/nginx/snippets/proxy_common.inc;
     }
 

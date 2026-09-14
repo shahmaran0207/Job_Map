@@ -1,6 +1,26 @@
 import { one, query } from './db';
 import { snapToCell, type GridCell } from './grid';
-import { isochrone as computeIsochrone, type IsochronePolygon, type TravelMode } from './routing';
+import {
+  isochrone as computeIsochrone,
+  type IsochronePolygon,
+  type TravelMode,
+  type TransitDeparture,
+} from './routing';
+
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+
+/**
+ * 캐시 키용 출발 시각 슬롯. 사용자가 1분 단위로 고른 시각을 그대로 키로 쓰면
+ * 캐시가 거의 안 맞으므로 30분 단위로 반올림한다("wed-0830" 형태).
+ * 도보/자차는 시간 무관이라 빈 문자열.
+ */
+function departureSlot(mode: TravelMode, departure?: TransitDeparture): string {
+  if (mode !== 'transit' || !departure) return '';
+  const roundedMinute = departure.minute < 30 ? 0 : 30;
+  const hh = String(departure.hour).padStart(2, '0');
+  const mm = String(roundedMinute).padStart(2, '0');
+  return `${WEEKDAY_KEYS[departure.dayOfWeek]}-${hh}${mm}`;
+}
 
 /**
  * 등시선 조회 계층.
@@ -49,14 +69,16 @@ export async function getIsochrone(
   lat: number,
   mode: TravelMode,
   minutes: number,
+  departure?: TransitDeparture,
 ): Promise<IsochroneResult> {
   const cell = snapToCell(lon, lat, CELL_SIZE);
+  const slot = departureSlot(mode, departure);
 
   const cached = await one<{ geojson: string }>(
     `SELECT ST_AsGeoJSON(geom::geometry) AS geojson
        FROM isochrone_cache
-      WHERE cell_key = $1 AND mode = $2 AND minutes = $3`,
-    [cell.key, mode, minutes],
+      WHERE cell_key = $1 AND mode = $2 AND minutes = $3 AND departure_slot = $4`,
+    [cell.key, mode, minutes, slot],
   );
 
   if (cached?.geojson) {
@@ -66,7 +88,7 @@ export async function getIsochrone(
   let polygon: IsochronePolygon;
   try {
     // 격자 중심으로 계산한다. 원좌표는 엔진에도 넘기지 않는다.
-    polygon = await computeIsochrone(cell.lon, cell.lat, mode, minutes);
+    polygon = await computeIsochrone(cell.lon, cell.lat, mode, minutes, departure);
   } catch (e) {
     throw new RoutingUnavailableError(e instanceof Error ? e.message : String(e));
   }
@@ -74,10 +96,17 @@ export async function getIsochrone(
   // 저장 실패가 조회를 실패시키지 않도록 한다. 캐시는 최적화이지 정확성이 아니다.
   try {
     await query(
-      `INSERT INTO isochrone_cache (cell_key, mode, minutes, geom, engine)
-       VALUES ($1, $2, $3, ST_SetSRID(ST_GeomFromGeoJSON($4), 4326)::geography, $5)
-         ON CONFLICT (cell_key, mode, minutes) DO NOTHING`,
-      [cell.key, mode, minutes, JSON.stringify(polygon), mode === 'transit' ? 'otp2' : 'valhalla'],
+      `INSERT INTO isochrone_cache (cell_key, mode, minutes, departure_slot, geom, engine)
+       VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326)::geography, $6)
+         ON CONFLICT (cell_key, mode, minutes, departure_slot) DO NOTHING`,
+      [
+        cell.key,
+        mode,
+        minutes,
+        slot,
+        JSON.stringify(polygon),
+        mode === 'transit' ? 'otp2' : 'valhalla',
+      ],
     );
   } catch (e) {
     console.error('등시선 캐시 저장 실패(무시하고 진행):', e instanceof Error ? e.message : e);
