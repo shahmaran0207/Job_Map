@@ -37,23 +37,32 @@ Valhalla 가 한국 OSM 추출본(약 300MB)을 내려받고 타일을 빌드한
 
 빌드된 타일은 `data/valhalla/` 에 남으므로 다음 기동부터는 즉시 뜬다. 이 디렉터리는 gitignore 된다(수 GB, 재생성 가능).
 
-## 대중교통 (OTP2) — 미구성
+## 대중교통 (OTP2) — 부산+인근 통근권만 구성됨 (2026-09-14)
 
-**GTFS 확보가 선행되어야 한다.** 국토부 표준 GTFS 는 국가대중교통정보센터(TAGO) 등록이 필요해 즉시 받을 수 없다. 그래서 기본 기동에서 제외했고, `transit` 프로필로 분리해 두었다.
+GTFS 는 국가교통DB(KTDB, ktdb.go.kr — TAGO 가 아니다)의 "교통망 GIS DB > 대중교통 > 대중교통" 항목에서 받는다. 회원가입 없이 일반이용자도 무상 신청 가능(소속기관·목적만 기재).
 
-준비되면:
+**전국 그래프는 이 개발 PC(RAM 15.4GB, Docker WSL2 VM 기본 7.45GB)로 빌드 불가 — 두 번 다 OOM.** 그래서 `osmium extract` 로 OSM PBF를, 커스텀 스트리밍 필터로 GTFS(stops→stop_times→trips→routes 순으로 참조 무결성 유지하며)를 부산+김해·양산·창원 일부(bbox `128.35,34.80,129.35,35.65`)로 잘라서 빌드했다.
 
-1. `data/otp/` 에 GTFS(zip) 와 한국 OSM PBF 를 넣는다
-2. `docker-compose.yml` 의 `otp.command` 를 `['--build','--save']` 로 바꿔 한 번 실행해 그래프를 만든다
-3. `['--load','--serve']` 로 되돌리고 `npm run routing:up:transit`
+- 정류장 22,249개, 그래프 118MB (`data/otp/graph.obj`)
+- 서빙 힙 `Xmx3g`/컨테이너 4g 로 충분 — 커버리지 밖(예: 서울)은 404 가 정상
 
-OTP2 는 전국 그래프에 램 8~16GB 를 요구한다. 개발 PC 사양을 먼저 확인할 것.
+다른 지역을 추가하려면:
 
-그 전까지 앱에서 **대중교통 모드는 직선거리 근사**로 동작한다(배너로 표시됨).
+1. `data/원본_대중교통GTFS_보관/202503_GTFS_DataSet/` 의 원본 GTFS txt에서 새 bbox로 다시 필터링(stops → stop_times → trips → routes → transfers 순서, 위 스크립트 방식 재사용)
+2. `data/valhalla/south-korea-latest.osm.pbf` 에서 같은 bbox로 `osmium extract`
+3. `data/otp/gtfs.zip`, `data/otp/korea.osm.pbf` 교체 (zip 최상위에 txt가 바로 있어야 함 — 폴더로 중첩하면 OTP가 빈 피드로 오인해 `missing required entity: Agency` 에러)
+4. `data/otp/otp-config.json` 이 `{"otpFeatures":{"SandboxAPITravelTime": true}}` 인지 확인 — 등시선 API 자체가 기본은 꺼진 샌드박스 기능이라 없으면 항상 404
+5. `docker-compose.yml` 의 `otp.command` 를 `['--build','--save']` 로 바꿔 한 번 실행해 그래프를 만들고(메모리 여유에 맞게 `Xmx` 조절), 끝나면 `['--load','--serve']` 로 되돌려 `npm run routing:up:transit`
+
+OTP2 TravelTime(등시선) API 는 POST JSON 이 아니라 **GET + 쿼리스트링**만 받고, `time` 파라미터는 ISO 오프셋(`2026-09-15T08:00:00+09:00`)만 파싱된다 — `src/lib/routing.ts` 가 이 형식으로 호출한다. nginx 프록시도 `proxy_pass` 에 `$is_args$args` 를 명시해야 쿼리스트링이 전달된다(안 그러면 파라미터가 전부 null로 들어가 500).
+
+대중교통은 시간표 기반이라 도보/자차와 달리 출발 요일/시각이 결과에 영향을 준다. 화면에서 사용자가 직접 고르고(`FilterPanel.tsx`), 등시선 캐시 키에도 30분 단위로 반올림한 슬롯이 들어간다(`db/006_transit_departure.sql`).
+
+커버리지 밖 지역에서는 앱이 **직선거리 근사**로 동작한다(배너로 표시됨).
 
 ## 등시선 캐시
 
-계산 결과는 `isochrone_cache` 테이블에 **영구 저장**된다. 키는 `(500m 격자, 이동수단, 분)` 이다.
+계산 결과는 `isochrone_cache` 테이블에 **영구 저장**된다. 키는 `(500m 격자, 이동수단, 분, 출발시각 슬롯)` 이다. 출발시각 슬롯은 도보/자차는 빈 문자열, 대중교통은 30분 단위로 반올림한 값(`db/006_transit_departure.sql`).
 
 - 같은 동네의 두 번째 사용자부터는 엔진을 아예 호출하지 않는다
 - **엔진이 꺼져 있어도 캐시된 지역은 계속 서비스된다**
