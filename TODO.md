@@ -6,19 +6,23 @@
 
 ---
 
-## 0. 다음에 할 것 (2026-09-14 기준)
+## 0. 다음에 할 것 (2026-09-15 기준)
 
 우선순위 순. 각 항목에 필요한 작업이 무엇인지 적혀 있다.
 
-### ① 배포 준비 ← 지금 당장
+### ① 배포 — 완료 (2026-09-15)
 
-Cloudflare Tunnel, Vercel 배포. 자세한 내용은 7번 참고.
+**https://chulmap.vercel.app** 배포 완료. `ORS_API_KEY` 등록, Fluid Compute +
+Function Region(icn1) 설정까지 끝냈다. 자세한 내용은 7번 참고.
+**Cloudflare Tunnel/자체 라우팅 서버는 더 이상 필요 없다** — 4번 참고
+(2026-09-15, ORS + minotor 서버리스 전환).
 
 ### ② 대중교통 커버리지 확대 (필요해지면)
 
 지금은 부산+인근 통근권(김해·양산·창원 일부)만 대중교통 모드가 실제 등시선으로
-동작한다. 다른 지역이 필요해지면 4번 및 [docker/README.md](./docker/README.md)의
-절차대로 새 bbox로 다시 잘라서 빌드. 이 개발 PC로는 전국 한 번에는 불가(OOM 확인됨).
+동작한다. 다른 지역이 필요해지면 4번 절차대로 GTFS를 새 bbox로 다시 필터링해
+`npm run build:transit-graph` 로 재빌드. 이 GTFS는 국가교통DB(KTDB) 포털에서
+수동 다운로드만 가능해 완전 자동화는 안 된다.
 
 ### ③ 유료 후보지 비교 리포트 — 나머지 조각 (보류)
 
@@ -65,6 +69,11 @@ Cloudflare Tunnel, Vercel 배포. 자세한 내용은 7번 참고.
       기본 꺼진 샌드박스 기능이었던 것과 POST가 아니라 GET+쿼리스트링이어야 하는 것,
       nginx가 쿼리스트링을 안 넘기던 것까지 전부 처음 발견·수정. 출발 요일/시각을
       사용자가 직접 고르는 UI 추가(유연근무 대응) — 2026-09-14
+- [x] 라우팅 엔진 전체를 서버리스로 전환 — Docker(Valhalla/OTP2/nginx) 완전 폐기, 도보·자차는
+      OpenRouteService 무료 API, 대중교통은 minotor(GTFS→protobuf, RAPTOR를 Vercel 함수
+      안에서 직접 실행)로 교체. "PC를 켜놔야 라우팅이 된다"는 문제와 Oracle Cloud 가입
+      실패 문제를 동시에 해결. `db/007_transit_graph.sql`, `src/lib/transit.ts`,
+      `src/scripts/build-transit-graph.ts` — 2026-09-15
 
 ---
 
@@ -153,35 +162,79 @@ deposit="1,000"   monthlyRent="67"    -> 보증금 1,000만원, 월세 67만원
 
 ---
 
-## 4. 라우팅 엔진 — 도보·자차 전국, 대중교통 부산권 정상 동작 (2026-09-14)
+## 4. 라우팅 엔진 — 서버 없음 (ORS + minotor), 대중교통은 부산권 (2026-09-15)
 
-`npm run routing:up` 으로 도보·자차 기동, `npm run routing:up:transit` 으로 대중교통까지.
-`npm run routing:check` 로 확인(프로브 좌표: 부산역):
+**결론부터: 자체 호스팅 서버가 없다.** 도보/자차는 OpenRouteService 무료 API,
+대중교통은 minotor(GTFS→protobuf, RAPTOR를 Vercel 함수 안에서 직접 실행)로
+동작한다. `npm run routing:check` 로 확인(프로브 좌표: 부산역):
 
 ```
-✓ walk     폴리곤 1개 / 91점    (0.1초)
-✓ drive    폴리곤 1개 / 1391점  (0.5초)
-✓ transit  폴리곤 6개 / 490점   (0.6초)
+✓ walk     ORS 응답 확인 (ORS_API_KEY 설정 시)
+✓ drive    ORS 응답 확인 (ORS_API_KEY 설정 시)
+✓ transit  폴리곤 9개 / 206점  (콜드 8.3초, 웜 상태는 즉시)
 ```
+
+**왜 자체 서버(Docker/VPS)를 버렸나 — 2026-09-14→15 하루 동안의 전환**
+
+원래 계획은 Valhalla+OTP2를 개발 PC Docker에 띄우고 Cloudflare Tunnel로 노출하는
+것이었다(아래 "2026-09-04~14 기록" 참고, 그 자체는 실제로 완성해서 검증까지
+끝냈다). 그런데 이건 "PC를 24시간 켜놔야 배포한 의미가 있다"는 근본 문제가
+있었다 — 배포 목적 자체를 무너뜨린다는 지적을 받고 대안을 찾았다.
+
+- **Oracle Cloud Always Free**(ARM 4코어/24GB, 영구 무료)를 먼저 시도했으나 계정
+  가입이 막혔다(이메일 인증/카드 검증 트랜잭션 오류 — 흔한 증상이라고 함)
+- **GCP e2-micro**(1GB, 영구 무료)도 검토했으나 가입 확실성을 100% 보장 못 함
+- **Hetzner 등 유료 VPS**(월 6천~1만원)도 검토했으나 "무료가 아니면 안 된다"는
+  요구와 맞지 않음
+- 최종적으로 **자체 서버 자체를 없애는 방향**을 찾음: 도보/자차는
+  OpenRouteService(이메일 가입만, 카드 불필요) 무료 API로, 대중교통은
+  [minotor](https://github.com/aubryio/minotor)로 서버리스 함수 안에서 직접 계산
 
 **구현됨**
-- `src/lib/isochrone.ts` — 캐시(`isochrone_cache`) + 실패 처리. 500m 격자 키로 영구 저장
-- `app/api/rents` — `ST_Intersects`(등시선 폴리곤) 공간 쿼리
-- UI — 이동수단(도보/대중교통/자차) + 통근 시간 필터
-- `docker/` — Valhalla + nginx 인증 프록시
-- 우아한 폴백 — 엔진 미가동 시 직선 반경으로 물러서되 화면에 경고 배너 + 점선 경계 표시
-- 로컬 엔진(127.0.0.1)이 죽어 있을 때의 폴백 타임아웃을 40초 → 2초로 단축 (`src/lib/routing.ts`) — 실제 배포(원격 엔진)는 40초 그대로
+- `src/lib/routing.ts` — 도보/자차는 ORS Isochrones API(`POST /v2/isochrones/{profile}`) 호출
+- `src/lib/transit.ts` — minotor Router로 RAPTOR 실행. 정류장까지는 직선거리 근사,
+  대중교통 구간은 시간표 기반 정확 계산. 그래프(timetable/stops 바이너리, 약 16MB)는
+  **`src/data/transit-graph/`에 파일로 커밋**돼 배포 번들에 그대로 포함된다(첫 버전은
+  DB(bytea)에 저장했다가 콜드스타트마다 16MB를 새로 받아오는 것 자체가 30~60초짜리
+  병목이었다 — 파일로 바꾸니 콜드스타트도 2~4초로 줄었다). 모듈 스코프에 한 번 더 캐싱
+- `src/scripts/build-transit-graph.ts` — GTFS → minotor 바이너리 → `src/data/transit-graph/`
+  에 저장 (수동 실행, 크론 아님 — GTFS 원본이 KTDB 포털 수동 다운로드라 자동화가 안
+  되고, 우리 GTFS는 서비스가 요일 무관하게 매일 동일해서(`calendar.txt`) 날짜별
+  재생성이 실익이 없다). 재실행하면 결과를 git에 커밋해야 배포에 반영된다
+- `app/api/rents/route.ts` 에 `maxDuration = 60` — Vercel Hobby는 Fluid Compute를
+  꺼두면 10초로 강제 제한된다(코드의 `maxDuration` 은 무시됨). 프로젝트 설정에서
+  Fluid Compute를 켜고 Function Region을 DB와 같은 서울(icn1)로 맞춰야 실제로 적용된다
+- `src/lib/isochrone.ts`, `app/api/rents`, UI(`FilterPanel.tsx` 등)는 **거의 안 건드림** —
+  `isochrone()` 의 시그니처와 캐시 키 구조가 그대로라 상위 계층은 영향 없음
+
+**트레이드오프**
+- minotor는 정류장까지 걷는 구간을 직선거리로 근사한다(예전 OTP2는 실제 도로 기준).
+  나중에 ORS Matrix API로 격자↔정류장 도보시간을 미리 계산해 캐시하면 정밀도를
+  높일 수 있다(2단계, 아직 안 함)
+- `db/007_transit_graph.sql`(bytea 테이블)은 첫 시도의 잔재로 DB에는 남아있지만
+  더 이상 코드에서 쓰지 않는다. 지우진 않았다(있어도 무해)
+
+**남은 것**
+- 다른 지역(수도권 등)이 필요해지면 GTFS를 새 bbox로 다시 필터링해
+  `npm run build:transit-graph` 재실행
+- 정류장 도보 접근 정밀도 개선(위 2단계)
+- 전국 주차장 표준데이터 적재 → 자차 2구간 경로(운전 + 주차장에서 도보) — 아직 미착수,
+  ORS로 전환하면서도 이 기능 자체는 구현된 적 없음
+
+<details>
+<summary>2026-09-04~14 기록 — Docker(Valhalla/OTP2) 시절 (폐기됨, 참고용으로 보존)</summary>
+
+`npm run routing:up` 으로 도보·자차 기동, `npm run routing:up:transit` 으로 대중교통까지
+띄우던 시절의 기록. 지금은 이 커맨드들도, `docker/` 디렉터리도 없다.
 
 **2026-09-04에 실제로 `npm run routing:up` 을 돌리며 잡은 버그 2건**
-- `valhalla` 컨테이너가 `no-new-privileges` 때문에 부팅 중 exit 1 반복 → 이미지 자체가 내부적으로 sudo를 써서 이 서비스만 완화 (`docker/docker-compose.yml`)
-- nginx 프록시가 Bearer 토큰 길이 때문에 `map_hash_bucket_size` 부족으로 기동 자체를 못 함 → 128로 상향 (`docker/nginx/routing.conf.template`)
+- `valhalla` 컨테이너가 `no-new-privileges` 때문에 부팅 중 exit 1 반복 → 이미지 자체가 내부적으로 sudo를 써서 이 서비스만 완화
+- nginx 프록시가 Bearer 토큰 길이 때문에 `map_hash_bucket_size` 부족으로 기동 자체를 못 함 → 128로 상향
 
 **참고 — 첫 빌드가 한 번 깨졌었다**
 2026-09-04 첫 빌드 도중 Docker Desktop이 꺼지면서 타일이 깨졌다(강남역 좌표에서도
-"No suitable edges near location"). PBF(273MB)는 이미 받아져 있어서
-`data/valhalla/valhalla_tiles*`, `file_hashes.txt` 만 지우고 재기동하니 재다운로드
-없이 재빌드되어 해결됐다. 다음에 또 이런 증상(엔진은 뜨는데 매 위치가 에러)이 나오면
-같은 방법으로 고칠 것.
+"No suitable edges near location"). PBF는 이미 받아져 있어서 타일 캐시만 지우고
+재기동하니 재다운로드 없이 재빌드되어 해결됐다.
 
 **2026-09-14: 대중교통(OTP2) — GTFS 확보 및 부산권 구성 완료**
 
@@ -190,22 +243,15 @@ GTFS는 TAGO가 아니라 국가교통DB(KTDB, ktdb.go.kr)에서 받는다(회�
 `osmium extract` + 커스텀 GTFS 스트리밍 필터로 부산+김해·양산·창원 일부만 잘라 빌드.
 
 과정에서 처음 발견·수정한 것 3건(GTFS가 이전엔 없어서 한 번도 실제 테스트된 적이 없었음):
-- OTP2의 등시선(TravelTime) API가 기본적으로 꺼진 샌드박스 기능 → `data/otp/otp-config.json` 에
-  `{"otpFeatures":{"SandboxAPITravelTime": true}}` 필요
-- `src/lib/routing.ts` 가 대중교통 등시선을 POST JSON으로 호출했는데 실제 API는
-  GET+쿼리스트링만 받음, `time` 파라미터는 ISO 오프셋 형식만 파싱됨 → 재작성
-- nginx 프록시(`docker/nginx/routing.conf.template`)가 쿼리스트링을 넘기지 않고
-  있었음 → `proxy_pass` 에 `$is_args$args` 추가
+- OTP2의 등시선(TravelTime) API가 기본적으로 꺼진 샌드박스 기능
+- OTP2 API가 POST JSON이 아니라 GET+쿼리스트링, `time` 파라미터는 ISO 오프셋 형식만 파싱
+- nginx 프록시가 쿼리스트링을 넘기지 않고 있었음
 
-대중교통은 시간표 기반이라 출발 요일/시각이 결과에 영향을 준다. 유연근무가 흔해서
-고정값(예: "평일 8시") 대신 사용자가 직접 고르게 UI 추가(`FilterPanel.tsx`) — 캐시 키에도
-30분 단위로 반올림한 출발시각 슬롯 추가(`db/006_transit_departure.sql`).
+대중교통은 시간표 기반이라 출발 요일/시각이 결과에 영향을 준다는 것도 이때 확인했고,
+그래서 사용자가 직접 출발 시각을 고르는 UI(`FilterPanel.tsx`)와 캐시 키의 출발시각
+슬롯(`db/006_transit_departure.sql`)은 서버리스 전환 이후에도 그대로 유지된다.
 
-상세 절차·다른 지역 추가 방법은 [docker/README.md](./docker/README.md) 참고.
-
-**남은 것**
-- 다른 지역(수도권 등)이 필요해지면 같은 방식으로 bbox만 바꿔 추가 빌드
-- 전국 주차장 표준데이터 적재 → 자차 2구간 경로(운전 + 주차장에서 도보)
+</details>
 
 ---
 
@@ -262,14 +308,34 @@ GTFS는 TAGO가 아니라 국가교통DB(KTDB, ktdb.go.kr)에서 받는다(회�
 
 ---
 
-## 7. 배포
+## 7. 배포 — 완료 (2026-09-15)
 
-- Vercel(프론트) + Supabase(DB, 구축 완료) + GitHub Actions(수집 크론)
-- 라우팅 엔진은 개발 PC Docker + Cloudflare Tunnel, 앞단에 Cloudflare Access
+**https://chulmap.vercel.app** (프로젝트 `gis19/chulmap`)
 
-**남은 것**
-- Cloudflare Tunnel 설정 (`cloudflared` 설치 → tunnel 생성 → docker-compose에 서비스 추가)
-- Vercel 배포 (`DATABASE_URL`, `KAKAO_REST_KEY`, `ROUTING_TOKEN` 환경변수 등록)
+- Vercel(프론트+API) + Supabase(DB) + GitHub Actions(수집 크론)
+- 라우팅(도보/자차=ORS, 대중교통=minotor)도 전부 Vercel 함수 안에서 돈다 — 4번 참고.
+  별도 서버·터널이 필요 없다
+- 환경변수 등록 완료: `DATABASE_URL`, `DATABASE_CA_CERT`, `KAKAO_REST_KEY`, `ORS_API_KEY`
+- Function Region: **Seoul(icn1)** — DB(Supabase ap-northeast-2)와 같은 리전으로
+  맞춰야 한다. 기본값(북미)으로 두면 왕복 지연이 커서 대중교통 콜드스타트가
+  타임아웃 났었다
+- **Fluid Compute 켜야 함** — 꺼져 있으면 Hobby 플랜 함수 실행시간이 10초로
+  강제 제한되고, `route.ts`의 `maxDuration` 설정이 무시된다
+
+**배포 중 실수 하나 — `.env` 파일이 첫 배포에 통째로 업로드될 뻔함**
+
+`.vercelignore`를 만들면서 `.env` 제외를 빠뜨려서, DB 비밀번호가 든 로컬 `.env`가
+배포 소스에 포함될 뻔했다(빌드 로그의 "Detected .env file" 메시지로 확인). 즉시
+`.vercelignore`에 `.env`/`.env.*` 추가하고 문제가 된 첫 배포는 삭제, Supabase DB
+비밀번호와 Kakao REST 키를 둘 다 재발급했다. `.vercelignore`를 새로 만들 때는
+`.gitignore`와 내용이 겹치더라도 **명시적으로 다시 다 써야 한다** — 둘 중 하나가
+있으면 다른 하나는 무시되는 것으로 보인다(둘 다 있어도 안전하게 하려면 두 파일
+내용을 동기화해야 함).
+
+**도메인**: `chulmap.com`을 Cloudflare Registrar에서 구매해뒀지만 라우팅 때문에
+필요했던 건 아니었다(어차피 서버가 없어졌으므로) — Vercel 프로젝트에 커스텀
+도메인으로 연결하는 것만 남았다(아직 안 함, `chulmap.vercel.app` 기본 주소로도
+정상 동작)
 
 ---
 

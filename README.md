@@ -101,18 +101,22 @@
 - **주소·상호 검색만 Kakao Local REST API** — 지도 SDK 없이 REST만 사용. 한국 주소/상호 검색은 대안이 없다
 - 포인트가 더 늘면 deck.gl 레이어 추가
 
-### 4.4 라우팅 엔진: 자체 호스팅 (상용 길찾기 API 아님)
+### 4.4 라우팅 엔진: 서버 없음 (ORS + minotor)
 
 카카오/네이버 길찾기 API는 정확하지만 호출당 과금이고 결과 저장에 약관 제약이 있다. 무엇보다 순진하게 만들면 `사용자 N명 × 공고 M건` 만큼 호출해야 하고, 공고 5만 건이면 사용자 한 명의 검색에 5만 콜이다.
 
 **해결 1 — 등시선(isochrone)**: "각 공고까지 몇 분?"이 아니라 "내 위치에서 30분에 닿는 영역"을 폴리곤 하나로 계산하고, 그 안의 공고를 PostGIS 공간 쿼리로 뽑는다. 5만 콜 → 1콜.
 
-**해결 2 — 등시선 영구 캐시**: 출발지를 격자에 스냅해 `(격자, 모드, 분)` 키로 폴리곤을 저장한다. 같은 동네의 두 번째 사용자부터는 라우팅 엔진을 아예 호출하지 않는다. 엔진이 죽어 있어도 캐시된 지역은 계속 서비스된다.
+**해결 2 — 등시선 영구 캐시**: 출발지를 격자에 스냅해 `(격자, 모드, 분, 대중교통 출발시각 슬롯)` 키로 폴리곤을 저장한다. 같은 동네의 두 번째 사용자부터는 라우팅 엔진을 아예 호출하지 않는다.
 
-**엔진**
-- 도보 / 자차: **Valhalla** + OSM
-- 대중교통: **OpenTripPlanner 2** + 국토부 표준 GTFS
-- 자차 경로 = `출발지 →(운전)→ 목적지 근처 주차장 후보 →(도보)→ 목적지` 2구간 합산. 후보 중 총 소요시간 최소를 채택. 주차장은 국토부 전국 주차장 정보 표준데이터 사용
+**엔진 — 자체 호스팅 서버가 없다**
+
+원래 Valhalla(도보/자차) + OpenTripPlanner 2(대중교통)를 개발 PC의 Docker에 띄우고 Cloudflare Tunnel로 노출하는 계획이었다. "PC를 24시간 켜놔야 서비스가 된다"는 게 배포의 의미를 무너뜨린다고 판단해 폐기했다 — 대안으로 검토한 상시 무료 클라우드(Oracle Cloud Always Free)도 신규 계정 가입·카드 인증이 100% 보장되지 않아 채택하지 않았다.
+
+- 도보 / 자차: **OpenRouteService** 무료 공개 API (이메일 가입만 필요, 카드 불필요). 하루 2,500건/월 40,000건, 도보 20시간·자차 1시간까지 등시선 지원
+- 대중교통: **[minotor](https://github.com/aubryio/minotor)** — GTFS를 압축 protobuf 바이너리로 미리 컴파일해 Vercel 서버리스 함수 안에서 RAPTOR 알고리즘을 직접 돌린다. 서버가 없다. 정류장까지 걷는 구간은 직선거리 근사(`src/lib/transit.ts`)
+- GTFS 원본은 국가교통DB(KTDB, ktdb.go.kr)에서 무상 신청. 자동 재수집이 안 돼(포털 수동 다운로드) `npm run build:transit-graph` 로 수동 갱신한다
+- 지금은 부산+인근 통근권(김해·양산·창원 일부)만 커버한다. 다른 지역은 GTFS를 새 bbox로 다시 필터링해 재빌드하면 된다
 
 ### 4.5 데이터 소스
 
@@ -178,13 +182,10 @@
 | 수집기 크론 | **GitHub Actions** (하루 2회) | 무료 |
 | 프론트 + API | **Vercel** (Next.js) | 무료 |
 | 지도 타일 / 주소검색 | VWorld or OSM / Kakao Local API | 무료 |
-| 라우팅 엔진 | Valhalla + OTP2 (Docker) | 아래 참고 |
+| 라우팅(도보/자차) | **OpenRouteService** 무료 API | 무료 |
+| 라우팅(대중교통) | **minotor** — Vercel 함수 안에서 직접 계산 | 무료 |
 
-라우팅 엔진만 무료 티어에 들어가지 않는다. 전국 OTP2는 램 8~16GB를 요구해 서버리스에 올릴 수 없다. 3단계로 간다.
-
-1. **지금 (링크 공유 단계)** — 라우팅 엔진을 개발 PC의 Docker에 띄우고 **Cloudflare Tunnel**로 노출한다. 무료, 포트포워딩·고정IP·인증서 불필요, `https://*.trycloudflare.com` 주소가 바로 나온다. PC가 꺼져 있으면 라우팅만 멈추고 지도·공고 목록은 Vercel+Supabase에서 계속 살아 있다. 캐시된 등시선도 계속 서비스된다.
-2. **상시 운영이 필요해지면** — **Oracle Cloud Always Free**: ARM Ampere 4코어 / 램 24GB / 스토리지 200GB 영구 무료. 전국 OTP2가 실제로 돌아간다. 단 서울·춘천 리전 ARM 재고가 자주 없어 인스턴스 생성에 며칠 걸릴 수 있다.
-3. **그것도 막히면** — Hetzner ARM CAX21(램 8GB) 월 €6 수준. 최저 유료 마지노선.
+4계층 전부 서버 0원이다. 자체 라우팅 서버(Docker/VPS)를 따로 띄울 필요가 없다 — 상세 배경은 4.4 참고.
 
 ---
 
@@ -192,9 +193,9 @@
 
 보안은 부가 기능이 아니라 설계 제약으로 다룬다. 전체 위협 모델과 방어는 **[SECURITY.md](./SECURITY.md)** 에 있다. 요약하면 이 프로젝트의 위험 지점은 세 곳이다.
 
-1. **라우팅 엔진 무인증 노출** (가장 위험) — Valhalla/OTP2에는 인증 기능이 없다. 개발 PC를 터널로 노출하는 배포 계획상, URL이 유출되면 누구나 당신 PC의 CPU를 쓸 수 있다. Cloudflare Access + nginx 인증 프록시 + 엔진 포트 미노출 3중 계층으로 막는다 (`docker/`)
-2. **SSRF** — 2차 수집기가 임의 기업 URL로 요청을 보낸다. 클라우드 메타데이터·내부망 접근 경로다. `safeFetch()` 를 유일한 외부 요청 경로로 두고 호스트 allowlist, DNS 사설대역 검사, 리다이렉트 차단을 적용한다
-3. **사용자 위치 = 민감 개인정보** — 출발지는 사실상 집 주소다. 격자 스냅 후에만 저장·캐시·로깅한다 (`src/lib/grid.ts`)
+1. **SSRF** — 2차 수집기가 임의 기업 URL로 요청을 보낸다. 클라우드 메타데이터·내부망 접근 경로다. `safeFetch()` 를 유일한 외부 요청 경로로 두고 호스트 allowlist, DNS 사설대역 검사, 리다이렉트 차단을 적용한다
+2. **사용자 위치 = 민감 개인정보** — 출발지는 사실상 집 주소다. 격자 스냅 후에만 저장·캐시·로깅한다 (`src/lib/grid.ts`)
+3. **ORS_API_KEY 유출** — 서버(Vercel API Route)에서만 쓰고 클라이언트로 절대 내려보내지 않는다. 자체 라우팅 서버를 없애면서 예전의 "PC 무인증 노출" 위협 자체가 사라졌다
 
 절대 규칙 8개(TLS 검증 우회 금지, SQL 문자열 보간 금지, `dangerouslySetInnerHTML` 금지 등)는 SECURITY.md 0장에 있다.
 
@@ -245,15 +246,15 @@ src/lib/env.ts               환경변수 + KST 기준일 + 로그 마스킹
 src/lib/db.ts                Postgres 풀 / TLS 검증 / 트랜잭션
 src/lib/security.ts          SSRF 방어, safeFetch, 정제, 프로토타입 오염 차단
 src/lib/grid.ts              격자 스냅 (등시선 캐시 키 + 위치 개인정보 보호)
-src/lib/routing.ts           라우팅 엔진 클라이언트 (인증 프록시 경유)
+src/lib/routing.ts           라우팅 클라이언트 (도보/자차=ORS, 대중교통=transit.ts 위임)
+src/lib/transit.ts           대중교통 등시선 — minotor(RAPTOR)를 서버 없이 직접 실행
 src/lib/text.ts              상호 정규화, 급여·날짜·경력 파싱, 외부 문자열 관문
 src/lib/geocode.ts           Kakao 지오코딩 + 영구 캐시 + 정밀도 산정
 src/collectors/types.ts      NormalizedPosting — 모든 수집기의 공통 출력 계약
 src/collectors/worknet.ts    고용24 오픈API 수집기
 src/collectors/ingest.ts     적재 + 변경 감지 + 마감 처리
 src/collectors/run.ts        오케스트레이터 + collect_run 기록
-src/scripts/                 migrate / geocode-pending / stats
-docker/                      Valhalla + OTP2 + nginx 인증 프록시
+src/scripts/                 migrate / geocode-pending / stats / build-transit-graph
 .github/workflows/collect.yml   무료 크론
 .github/workflows/security.yml  npm audit / gitleaks / CodeQL
 ```
@@ -265,9 +266,9 @@ docker/                      Valhalla + OTP2 + nginx 인증 프록시
 - [ ] 실거래가 수집기 (`npm run probe:molit` 으로 엔드포인트·필드 확정 후)
 - [ ] 법정동코드 마스터 적재 + 수집 우선순위 (10,000회/일 한도 안에서 전국 훑기)
 - [ ] 건물 좌표 해결 배치 (`place-resolver` 재사용)
-- [ ] Valhalla / OTP2 Docker Compose + 등시선 API
+- [x] 등시선 라우팅 — OpenRouteService(도보/자차) + minotor(대중교통, 부산권 한정)
 - [ ] 전국 주차장 데이터 적재 + 자차 2구간 경로
-- [x] Next.js + MapLibre 지도 — 1단계 완료 (직선 반경). 등시선 교체는 라우팅 엔진 이후
-- [ ] 매물 검색 딥링크 (네이버부동산·직방)
-- [ ] Cloudflare Tunnel 배포
+- [x] Next.js + MapLibre 지도
+- [x] 매물 검색 딥링크 (네이버부동산·직방·다방 — 검색어 복사 + 홈 열기 방식)
+- [ ] Vercel 배포
 - [ ] *(승인 시)* 채용 레이어 복원

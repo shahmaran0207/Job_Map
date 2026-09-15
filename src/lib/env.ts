@@ -89,11 +89,10 @@ export const env = {
     return req('MOLIT_API_KEY');
   },
 
-  // 자체 호스팅 라우팅 엔진. 엔진 자체에는 인증 기능이 없으므로
-  // 반드시 인증 프록시 뒤에 두고 이 토큰을 붙여 호출한다. (docker/ 참고)
-  routingUrl: opt('ROUTING_URL'),
-  get routingToken() {
-    return opt('ROUTING_TOKEN');
+  // OpenRouteService — 도보/자차 등시선. 이메일 가입만으로 발급되는 무료 API 키.
+  // (자체 호스팅 라우팅 엔진은 "PC를 켜놔야 동작한다"는 문제로 폐기했다 — TODO.md 4번 참고)
+  get orsApiKey() {
+    return opt('ORS_API_KEY');
   },
 
   collectMaxPages: num('COLLECT_MAX_PAGES', 0),

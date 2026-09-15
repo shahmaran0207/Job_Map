@@ -123,9 +123,7 @@ export async function safeFetch(
 
   while (true) {
     if (url.protocol !== 'https:') {
-      // 로컬 개발용 라우팅 엔진(localhost)만 예외로 허용한다.
-      const isLocalHttp = url.protocol === 'http:' && isBlockedIp(url.hostname);
-      if (!isLocalHttp) throw new Error(`HTTPS 가 아닌 요청은 허용하지 않습니다: ${url.protocol}`);
+      throw new Error(`HTTPS 가 아닌 요청은 허용하지 않습니다: ${url.protocol}`);
     }
 
     if (allowHosts) {

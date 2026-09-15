@@ -1,0 +1,17 @@
+/data
+/data/**
+.env
+.env.*
+!.env.example
+node_modules
+node_modules/**
+**/node_modules/**
+.git
+.git/**
+secrets
+secrets/**
+*.pem
+*.key
+*.p12
+*.pfx
+*.node

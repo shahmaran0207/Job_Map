@@ -105,7 +105,7 @@ export async function getIsochrone(
         minutes,
         slot,
         JSON.stringify(polygon),
-        mode === 'transit' ? 'otp2' : 'valhalla',
+        mode === 'transit' ? 'minotor' : 'ors',
       ],
     );
   } catch (e) {

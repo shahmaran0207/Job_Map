@@ -4,39 +4,34 @@ import { isochroneCacheStats } from '../lib/isochrone';
 import { isochrone, type TravelMode } from '../lib/routing';
 
 /**
- * 라우팅 엔진 진단.
+ * 라우팅 진단.
  *
- * 다른 진단 스크립트와 같은 역할이다. "안 된다" 를 "무엇이 왜 안 된다" 로 바꾼다.
- * 엔진은 개발 PC Docker 위에 있어 상태가 자주 바뀌므로 이게 특히 유용하다.
+ * "안 된다" 를 "무엇이 왜 안 된다" 로 바꾼다. 서버가 없어졌으니(ORS + minotor,
+ * TODO.md 4번 참고) 예전처럼 "Docker Desktop이 떠 있는가"를 확인할 필요는
+ * 없다 — 확인할 건 ORS_API_KEY 설정과 대중교통 그래프(transit_graph 테이블)
+ * 준비 여부뿐이다.
  *
- * 대중교통(OTP2) 그래프는 지금 부산/경남만 커버한다(전국 그래프는 이 PC
- * 메모리로 빌드 불가 — TODO.md 4번 참고). 그래서 프로브 좌표도 그 범위
- * 안(부산역)으로 잡는다. 서울 등 커버리지 밖 좌표는 전부 404 가 정상이다.
+ * 대중교통 그래프는 지금 부산+인근 통근권만 커버한다(전국은 GTFS 원본 자체가
+ * 수동 다운로드라 자동화가 안 되고, 필요할 때 bbox를 바꿔 다시 빌드해야 한다).
+ * 그래서 프로브 좌표도 그 범위 안(부산역)으로 잡는다.
  */
 const PROBE = { lon: 129.0403, lat: 35.1156, label: '부산역' };
 const TRANSIT_DEPARTURE = { dayOfWeek: 1 as const, hour: 8, minute: 0 };
 
 async function main(): Promise<void> {
   console.log('── 설정 ────────────────────────────────────');
-  console.log(`ROUTING_URL    ${env.routingUrl ?? '(없음)'}`);
-  console.log(`ROUTING_TOKEN  ${env.routingToken ? `설정됨 (${env.routingToken.length}자)` : '(없음)'}`);
+  console.log(`ORS_API_KEY  ${env.orsApiKey ? `설정됨 (${env.orsApiKey.length}자)` : '(없음)'}`);
 
-  if (!env.routingUrl || !env.routingToken) {
+  if (!env.orsApiKey) {
     console.log('');
-    console.log('두 값을 .env 에 설정해야 합니다.');
-    console.log('  ROUTING_URL=http://127.0.0.1:8000');
-    console.log('  ROUTING_TOKEN=<openssl rand -hex 32 또는 아래 명령>');
-    console.log('  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-    console.log('');
-    console.log('설정 후: npm run routing:up');
-    process.exitCode = 1;
-    return;
+    console.log('openrouteservice.org 에서 무료 키를 발급해 .env 에 설정하세요.');
+    console.log('  ORS_API_KEY=<발급받은 키>');
+    console.log('(대중교통은 이 키가 없어도 확인 가능합니다 — 아래에서 계속 시도합니다)');
   }
 
   console.log('');
   console.log(`── 등시선 호출 (${PROBE.label}) ──────────────`);
 
-  // 대중교통은 GTFS 확보 전까지 실패하는 것이 정상이다. 도보/자차부터 본다.
   const modes: TravelMode[] = ['walk', 'drive', 'transit'];
   let anyOk = false;
 
@@ -61,9 +56,9 @@ async function main(): Promise<void> {
       anyOk = true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.log(`✗ ${mode.padEnd(8)} ${msg.slice(0, 120)}`);
+      console.log(`✗ ${mode.padEnd(8)} ${msg.slice(0, 160)}`);
       if (mode === 'transit') {
-        console.log('           (transit 프로필로 otp 컨테이너가 떠 있는지 확인: npm run routing:up:transit)');
+        console.log('           (npm run build:transit-graph 로 그래프를 먼저 채웠는지 확인)');
       }
     }
   }
@@ -79,15 +74,12 @@ async function main(): Promise<void> {
 
   console.log('');
   if (!anyOk) {
-    console.log('엔진에 도달하지 못했습니다. 확인 순서:');
-    console.log('  1) Docker Desktop 이 실행 중인가');
-    console.log('  2) npm run routing:up 을 실행했는가');
-    console.log('  3) npm run routing:logs — Valhalla 가 타일을 빌드 중일 수 있다(첫 기동 15~40분)');
-    console.log('  4) 401 이 보이면 .env 의 ROUTING_TOKEN 과 컨테이너 값이 다르다.');
-    console.log('     npm run routing:down 후 다시 up 하면 반영된다.');
+    console.log('전부 실패했습니다. 확인 순서:');
+    console.log('  1) .env 의 ORS_API_KEY 가 올바른가 (도보/자차)');
+    console.log('  2) npm run build:transit-graph 를 실행했는가 (대중교통)');
     process.exitCode = 1;
   } else {
-    console.log('엔진 정상. 지도가 등시선으로 동작합니다.');
+    console.log('정상. 지도가 등시선으로 동작합니다.');
   }
 }
 

@@ -1,58 +1,28 @@
 import { env } from './env';
-import { assertKoreanCoord, isBlockedIp, safeFetch } from './security';
+import { assertKoreanCoord, safeFetch } from './security';
+import { transitIsochrone, type TransitDeparture } from './transit';
 
-// 로컬 개발용 엔진(127.0.0.1)이 꺼져 있으면 빨리 실패해서 직선 반경으로
-// 물러서야 한다 — 안 그러면 검색/필터 한 번에 최대 40초씩 멈춘 것처럼 보인다.
-// 실제 배포(Cloudflare Tunnel 뒤 원격 엔진)는 등시선 계산 자체가 오래 걸릴 수
-// 있어 타임아웃을 넉넉하게 둔다.
-const LOCAL_ROUTING_TIMEOUT_MS = 2_000;
-const REMOTE_ROUTING_TIMEOUT_MS = 40_000;
-
-function isLocalRoutingHost(hostname: string): boolean {
-  return hostname === 'localhost' || isBlockedIp(hostname);
-}
+export type { TransitDeparture };
 
 /**
- * 라우팅 엔진 클라이언트.
+ * 등시선 클라이언트.
  *
- * 엔진(Valhalla/OTP2)에는 인증 기능이 없으므로 반드시 인증 프록시(docker/)를 경유한다.
- * 이 파일은 프록시 주소로만 요청하고, 프록시가 요구하는 Bearer 토큰을 붙인다.
- * 엔진 포트로 직접 요청하는 코드는 리뷰에서 반려한다.
+ * 도보/자차는 OpenRouteService(무료 공개 API, 이메일 가입만 필요)를 그대로
+ * 호출한다. 대중교통은 자체 호스팅 서버 없이 이 프로세스 안에서 minotor
+ * (RAPTOR)를 직접 돌린다(`./transit.ts`).
+ *
+ * 예전엔 Valhalla/OTP2 를 개발 PC Docker 위에서 돌리고 인증 프록시를 거쳐
+ * 호출했다 — "PC를 꺼놓으면 라우팅 엔진도 죽는다"는 문제로 폐기했다
+ * (TODO.md 4번 참고). 지금은 서버가 아예 없다.
  */
 
 export type TravelMode = 'walk' | 'transit' | 'drive';
 
-/**
- * 대중교통 출발 시각. 도보/자차와 달리 시간표 기반이라 결과가 출발 시각에 따라
- * 달라진다. 유연근무가 흔해져서 고정 시각(예: "평일 오전 8시")을 강제하지 않고
- * 사용자가 직접 고르게 한다.
- *
- * dayOfWeek 는 JS Date.getDay() 와 동일하게 0=일요일 ~ 6=토요일.
- */
-export interface TransitDeparture {
-  dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
-  hour: number;
-  minute: number;
-}
-
-/** dayOfWeek 에 해당하는 가장 가까운 미래(오늘 포함) 날짜를 yyyy-MM-dd 로. */
-function nextDateForWeekday(dayOfWeek: number): string {
-  const now = new Date();
-  const diff = (dayOfWeek - now.getDay() + 7) % 7;
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/** 출발 시각을 KST 오프셋 ISO 문자열로. OTP2 TravelTime API 가 요구하는 형식이다. */
-function departureToIso(departure: TransitDeparture): string {
-  const date = nextDateForWeekday(departure.dayOfWeek);
-  const hh = String(departure.hour).padStart(2, '0');
-  const mm = String(departure.minute).padStart(2, '0');
-  return `${date}T${hh}:${mm}:00+09:00`;
-}
+const ORS_TIMEOUT_MS = 15_000;
+const ORS_PROFILE: Record<'walk' | 'drive', string> = {
+  walk: 'foot-walking',
+  drive: 'driving-car',
+};
 
 /** 사용자가 지정할 수 있는 통근 시간 상한. 임의 값을 허용하면 엔진을 태울 수 있다. */
 const ALLOWED_MINUTES = [10, 15, 20, 30, 45, 60, 90] as const;
@@ -72,15 +42,6 @@ export interface IsochronePolygon {
   coordinates: number[][][][];
 }
 
-function requireRouting(): { url: string; token: string } {
-  if (!env.routingUrl || !env.routingToken) {
-    throw new Error(
-      'ROUTING_URL / ROUTING_TOKEN 이 설정되지 않았습니다. docker/ 의 인증 프록시를 먼저 띄우세요.',
-    );
-  }
-  return { url: env.routingUrl.replace(/\/+$/, ''), token: env.routingToken };
-}
-
 /**
  * 등시선(출발지에서 N분 내에 닿는 영역)을 계산한다.
  *
@@ -98,56 +59,36 @@ export async function isochrone(
   assertKoreanCoord(lon, lat);
   const mins = assertAllowedMinutes(minutes);
 
-  const { url, token } = requireRouting();
-  const isTransit = mode === 'transit';
-
-  const timeoutMs = isLocalRoutingHost(new URL(url).hostname)
-    ? LOCAL_ROUTING_TIMEOUT_MS
-    : REMOTE_ROUTING_TIMEOUT_MS;
-
-  let res: Awaited<ReturnType<typeof safeFetch>>;
-
-  if (isTransit) {
+  if (mode === 'transit') {
     if (!departure) throw new Error('대중교통 모드는 출발 시각(departure)이 필요합니다');
-    // OTP2 TravelTime 샌드박스 API — GET + 쿼리스트링만 받는다. POST JSON 이
-    // 아니다. time 은 ISO 오프셋 형식만 파싱된다("8:00am" 등은 405/500 을 낸다).
-    const qs = new URLSearchParams({
-      location: `${lat},${lon}`,
-      time: departureToIso(departure),
-      modes: 'WALK,TRANSIT',
-      cutoff: `${mins}M`,
-    });
-    res = await safeFetch(`${url}/otp/isochrone?${qs.toString()}`, {
-      method: 'GET',
-      allowHosts: [new URL(url).hostname],
-      headers: { Authorization: `Bearer ${token}` },
-      maxRedirects: 0,
-      maxBytes: 8 * 1024 * 1024,
-      timeoutMs,
-    });
-  } else {
-    const body = JSON.stringify({
-      locations: [{ lon, lat }],
-      costing: mode === 'walk' ? 'pedestrian' : 'auto',
-      contours: [{ time: mins }],
-      polygons: true,
-      denoise: 0.4,
-      generalize: 50,
-    });
-    res = await safeFetch(`${url}/valhalla/isochrone`, {
-      method: 'POST',
-      body,
-      allowHosts: [new URL(url).hostname],
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      maxRedirects: 0,
-      maxBytes: 8 * 1024 * 1024,
-      timeoutMs,
-    });
+    return transitIsochrone(lon, lat, mins, departure);
   }
 
-  if (res.status === 401) throw new Error('라우팅 프록시 인증 실패 (ROUTING_TOKEN 불일치)');
-  if (res.status === 429) throw new Error('라우팅 요청이 레이트리밋에 걸렸습니다');
-  if (res.status !== 200) throw new Error(`라우팅 엔진 오류 (HTTP ${res.status})`);
+  if (!env.orsApiKey) {
+    throw new Error('ORS_API_KEY 가 설정되지 않았습니다. openrouteservice.org 에서 무료 키를 발급하세요.');
+  }
+
+  const body = JSON.stringify({
+    locations: [[lon, lat]],
+    range: [mins * 60], // 초 단위
+    range_type: 'time',
+  });
+
+  const res = await safeFetch(`https://api.openrouteservice.org/v2/isochrones/${ORS_PROFILE[mode]}`, {
+    method: 'POST',
+    body,
+    allowHosts: ['api.openrouteservice.org'],
+    headers: { Authorization: env.orsApiKey, 'Content-Type': 'application/json' },
+    maxRedirects: 0,
+    maxBytes: 8 * 1024 * 1024,
+    timeoutMs: ORS_TIMEOUT_MS,
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('ORS 인증 실패 (ORS_API_KEY 확인)');
+  }
+  if (res.status === 429) throw new Error('ORS 요청이 레이트리밋에 걸렸습니다');
+  if (res.status !== 200) throw new Error(`ORS 오류 (HTTP ${res.status})`);
 
   return toMultiPolygon(JSON.parse(res.text));
 }

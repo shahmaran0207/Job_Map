@@ -20,6 +20,10 @@ import { HOUSING_TYPES, type HousingType } from '../../../src/collectors/molit-t
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// 대중교통 등시선은 콜드스타트 시 minotor 그래프(약 16MB)를 DB에서 읽어 파싱한다
+// (src/lib/transit.ts). 웜 상태에선 모듈 스코프 캐시로 즉시 응답하지만, 콜드
+// 스타트 첫 요청은 수 초가 걸릴 수 있어 기본 10초보다 여유를 둔다.
+export const maxDuration = 60;
 
 /** 엔진이 없을 때 쓰는 직선 반경(m). 임의 값을 받으면 전국 스캔으로 DB를 태울 수 있다. */
 const ALLOWED_RADIUS = [500, 1000, 2000, 3000, 5000, 10_000] as const;
