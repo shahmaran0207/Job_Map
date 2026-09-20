@@ -74,6 +74,15 @@ Function Region(icn1) 설정까지 끝냈다. 자세한 내용은 7번 참고.
       안에서 직접 실행)로 교체. "PC를 켜놔야 라우팅이 된다"는 문제와 Oracle Cloud 가입
       실패 문제를 동시에 해결. `db/007_transit_graph.sql`, `src/lib/transit.ts`,
       `src/scripts/build-transit-graph.ts` — 2026-09-15
+- [x] 배포 후 CSP nonce/정적 캐시 충돌 수정 — 검색·지도 하이드레이션이 실서비스에서
+      통째로 죽던 원인. `app/layout.tsx`에 `force-dynamic` 추가 — 2026-09-17
+- [x] 검색을 부산권 후보 목록 방식으로 전환 — 상호 일부만 입력해도 부산+인근
+      통근권 bbox로 제한한 후보 목록에서 직접 고른다(`src/lib/geocode.ts`
+      `searchPlaces()`, `app/components/SearchBar.tsx`) — 2026-09-17
+- [x] 건물 클릭 시 직장까지 실제 경로 표시 — 도보/자차는 ORS Directions, 대중교통은
+      minotor 지점간 Query. 지하철은 정류장 직선(부산 1~4호선만 공식색), 버스는
+      ORS로 도로에 스냅 + 자동 배정색, 지하철만/버스만/전체 토글
+      (`src/lib/ors.ts`, `app/api/route/route.ts`) — 2026-09-20
 
 ---
 
