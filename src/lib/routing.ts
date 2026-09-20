@@ -1,8 +1,8 @@
-import { env } from './env';
-import { assertKoreanCoord, safeFetch } from './security';
-import { transitIsochrone, type TransitDeparture } from './transit';
+import { assertKoreanCoord } from './security';
+import { orsDirections, orsFetch } from './ors';
+import { transitIsochrone, transitRoute, type TransitDeparture, type TransitModeFilter } from './transit';
 
-export type { TransitDeparture };
+export type { TransitDeparture, TransitModeFilter };
 
 /**
  * 등시선 클라이언트.
@@ -18,11 +18,18 @@ export type { TransitDeparture };
 
 export type TravelMode = 'walk' | 'transit' | 'drive';
 
-const ORS_TIMEOUT_MS = 15_000;
-const ORS_PROFILE: Record<'walk' | 'drive', string> = {
+const ORS_PROFILE: Record<'walk' | 'drive', 'foot-walking' | 'driving-car'> = {
   walk: 'foot-walking',
   drive: 'driving-car',
 };
+
+/** 지도에 그릴 경로 한 구간. 세그먼트마다 색·종류가 다를 수 있다(대중교통 환승 등). */
+export interface RouteSegment {
+  coords: [number, number][];
+  color: string;
+  kind: 'subway' | 'bus' | 'walk' | 'drive' | 'transfer';
+  label?: string;
+}
 
 /** 사용자가 지정할 수 있는 통근 시간 상한. 임의 값을 허용하면 엔진을 태울 수 있다. */
 const ALLOWED_MINUTES = [10, 15, 20, 30, 45, 60, 90] as const;
@@ -64,33 +71,41 @@ export async function isochrone(
     return transitIsochrone(lon, lat, mins, departure);
   }
 
-  if (!env.orsApiKey) {
-    throw new Error('ORS_API_KEY 가 설정되지 않았습니다. openrouteservice.org 에서 무료 키를 발급하세요.');
-  }
-
-  const body = JSON.stringify({
+  const json = await orsFetch(`/v2/isochrones/${ORS_PROFILE[mode]}`, {
     locations: [[lon, lat]],
     range: [mins * 60], // 초 단위
     range_type: 'time',
   });
 
-  const res = await safeFetch(`https://api.openrouteservice.org/v2/isochrones/${ORS_PROFILE[mode]}`, {
-    method: 'POST',
-    body,
-    allowHosts: ['api.openrouteservice.org'],
-    headers: { Authorization: env.orsApiKey, 'Content-Type': 'application/json' },
-    maxRedirects: 0,
-    maxBytes: 8 * 1024 * 1024,
-    timeoutMs: ORS_TIMEOUT_MS,
-  });
+  return toMultiPolygon(json);
+}
 
-  if (res.status === 401 || res.status === 403) {
-    throw new Error('ORS 인증 실패 (ORS_API_KEY 확인)');
+/**
+ * 두 지점 사이의 실제 경로. 건물 상세 팝업의 "경로 보기"가 쓴다.
+ *
+ * `isochrone()`과 달리 지점→지점 단일 경로라서 결과를 캐시하지 않는다(요청
+ * 조합이 사실상 무한해서 캐시 적중률이 낮고, 직장 좌표가 목적지로 들어가는
+ * 요청이라 캐시에 남기는 것도 바람직하지 않다).
+ */
+export async function route(
+  fromLon: number,
+  fromLat: number,
+  toLon: number,
+  toLat: number,
+  mode: TravelMode,
+  departure?: TransitDeparture,
+  transitModes?: TransitModeFilter,
+): Promise<RouteSegment[]> {
+  assertKoreanCoord(fromLon, fromLat);
+  assertKoreanCoord(toLon, toLat);
+
+  if (mode === 'transit') {
+    if (!departure) throw new Error('대중교통 모드는 출발 시각(departure)이 필요합니다');
+    return transitRoute(fromLon, fromLat, toLon, toLat, departure, transitModes ?? 'all');
   }
-  if (res.status === 429) throw new Error('ORS 요청이 레이트리밋에 걸렸습니다');
-  if (res.status !== 200) throw new Error(`ORS 오류 (HTTP ${res.status})`);
 
-  return toMultiPolygon(JSON.parse(res.text));
+  const coords = await orsDirections(fromLon, fromLat, toLon, toLat, ORS_PROFILE[mode]);
+  return [{ coords, color: mode === 'walk' ? '#22D3EE' : '#F59E0B', kind: mode }];
 }
 
 /** 엔진별로 다른 응답 형태를 MultiPolygon 하나로 정규화한다. */

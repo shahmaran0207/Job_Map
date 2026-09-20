@@ -11,7 +11,7 @@ import {
   type MapLayerMouseEvent,
 } from 'maplibre-gl';
 import type { Point } from 'geojson';
-import type { AreaInfo, BuildingPoint } from '../lib/types';
+import type { AreaInfo, BuildingPoint, TravelMode } from '../lib/types';
 import { HOUSING_LABEL_SHORT, formatManwon, toPyeong } from '../lib/types';
 import { buildListingLinks } from '../../src/lib/listing-links';
 
@@ -31,6 +31,7 @@ import { buildListingLinks } from '../../src/lib/listing-links';
 const TILE_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const SOURCE_ID = 'buildings';
 const ORIGIN_SOURCE = 'origin';
+const ROUTE_SOURCE = 'route';
 
 // 매물 검색 딥링크 버튼. 검색어 자동 적용 URL은 3사 다 없어져서(TODO.md 6장),
 // "검색어 복사 + 홈 열기" 방식으로 켜둔 상태. popupHtml() 참고.
@@ -54,6 +55,9 @@ interface Props {
   intersection?: (GeoJSON.Polygon | GeoJSON.MultiPolygon) | null;
   buildings: BuildingPoint[];
   mode: 'wolse' | 'jeonse';
+  /** 건물 팝업의 "경로 보기" 가 쓴다. */
+  travel: TravelMode;
+  departure: { dayOfWeek: number; hour: number; minute: number };
 }
 
 /** 색 구간 경계(만원). 월세와 전세는 자릿수가 달라 따로 둔다. */
@@ -62,13 +66,21 @@ const BREAKS = {
   jeonse: [10_000, 20_000, 35_000, 60_000],
 } as const;
 
-export default function RentMap({ origin, origin2, area, area2, intersection, buildings, mode }: Props) {
+export default function RentMap({
+  origin, origin2, area, area2, intersection, buildings, mode, travel, departure,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
-  // 클릭 핸들러는 지도 생성 시 한 번만 등록되므로, 최신 mode 값을 읽으려면 ref 가 필요하다.
+  // 클릭 핸들러는 지도 생성 시 한 번만 등록되므로, 최신 값을 읽으려면 ref 가 필요하다.
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const originRef = useRef(origin);
+  originRef.current = origin;
+  const travelRef = useRef(travel);
+  travelRef.current = travel;
+  const departureRef = useRef(departure);
+  departureRef.current = departure;
 
   // 지도 인스턴스는 한 번만 만든다. 필터가 바뀔 때마다 재생성하면 깜빡인다.
   useEffect(() => {
@@ -96,6 +108,10 @@ export default function RentMap({ origin, origin2, area, area2, intersection, bu
         data: { type: 'FeatureCollection', features: [] },
       });
       map.addSource(SOURCE_ID, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addSource(ROUTE_SOURCE, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
@@ -181,6 +197,32 @@ export default function RentMap({ origin, origin2, area, area2, intersection, bu
         },
       });
 
+      // 건물 팝업의 "경로 보기" 결과. 흰색 케이싱 위에 세그먼트별 색(지하철
+      // 노선색/버스 자동색/도보·환승 회색)을 얹어 지도 배경 색과 안 섞이게 한다.
+      map.addLayer({
+        id: 'route-casing',
+        type: 'line',
+        source: ROUTE_SOURCE,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#0b1120', 'line-width': 6, 'line-opacity': 0.6 },
+      });
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: ROUTE_SOURCE,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['match', ['get', 'kind'], 'walk', 3, 'transfer', 3, 4],
+          'line-dasharray': [
+            'match', ['get', 'kind'],
+            'walk', ['literal', [1, 1.5]],
+            'transfer', ['literal', [1, 1.5]],
+            ['literal', [1, 0]],
+          ],
+        },
+      });
+
       map.addLayer({
         id: 'origin-marker',
         type: 'circle',
@@ -205,15 +247,29 @@ export default function RentMap({ origin, origin2, area, area2, intersection, bu
         map.on('mouseleave', layer, () => {
           map.getCanvas().style.cursor = '';
           popup.remove();
+          (map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
         });
         map.on('click', layer, (e: MapLayerMouseEvent) => {
           const f = e.features?.[0];
           if (!f) return;
+          const [bLon, bLat] = (f.geometry as Point).coordinates as [number, number];
           popup
-            .setLngLat((f.geometry as Point).coordinates as [number, number])
-            .setHTML(popupHtml(f.properties as Record<string, unknown>, modeRef.current))
+            .setLngLat([bLon, bLat])
+            .setHTML(popupHtml(f.properties as Record<string, unknown>, modeRef.current, travelRef.current))
             .addTo(map);
           attachListingCopyHandlers(popup.getElement());
+          attachRouteButtonHandlers(popup.getElement(), (routeMode) => {
+            const o = originRef.current;
+            const routeSrc = map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined;
+            if (!o || !routeSrc) return;
+            void showRoute(
+              routeSrc, o.lon, o.lat, bLon, bLat,
+              travelRef.current, departureRef.current, routeMode,
+            );
+          });
         });
       }
     });
@@ -409,7 +465,75 @@ function attachListingCopyHandlers(el: HTMLElement | undefined): void {
   });
 }
 
-function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string {
+/** 팝업의 "경로 보기" 버튼 행. 대중교통일 때만 지하철/버스/전체를 고를 수 있다. */
+function routeButtonsHtml(travel: TravelMode): string {
+  const btn = (label: string, routeMode: string) =>
+    `<button type="button" class="route-btn rounded bg-amber-400/10 px-1.5 py-0.5 text-[11px] text-amber-200 hover:bg-amber-400/20"
+        data-route-mode="${routeMode}">${label}</button>`;
+
+  const buttons = travel === 'transit'
+    ? `${btn('지하철만', 'subway')}${btn('버스만', 'bus')}${btn('전체', 'all')}`
+    : btn('경로 보기', 'all');
+
+  return `<div class="mt-2 flex flex-wrap gap-1 border-t border-cyan-400/15 pt-1.5">${buttons}</div>`;
+}
+
+/** popupHtml() 이 심어둔 `.route-btn` 에 클릭 리스너를 붙인다(attachListingCopyHandlers 와 같은 이유). */
+function attachRouteButtonHandlers(
+  el: HTMLElement | undefined,
+  onClick: (routeMode: 'subway' | 'bus' | 'all') => void,
+): void {
+  if (!el) return;
+  el.querySelectorAll<HTMLButtonElement>('.route-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.routeMode;
+      onClick(mode === 'subway' || mode === 'bus' ? mode : 'all');
+    });
+  });
+}
+
+/** `/api/route` 를 호출해 결과를 지도에 그린다. */
+async function showRoute(
+  routeSrc: GeoJSONSource,
+  fromLon: number,
+  fromLat: number,
+  toLon: number,
+  toLat: number,
+  travel: TravelMode,
+  departure: { dayOfWeek: number; hour: number; minute: number },
+  transitModes: 'subway' | 'bus' | 'all',
+): Promise<void> {
+  const qs = new URLSearchParams({
+    fromLon: String(fromLon), fromLat: String(fromLat),
+    toLon: String(toLon), toLat: String(toLat),
+    travel,
+  });
+  if (travel === 'transit') {
+    qs.set('depDay', String(departure.dayOfWeek));
+    qs.set('depHour', String(departure.hour));
+    qs.set('depMinute', String(departure.minute));
+    qs.set('transitModes', transitModes);
+  }
+
+  try {
+    const res = await fetch(`/api/route?${qs}`);
+    if (!res.ok) return;
+    const data: { segments: { coords: [number, number][]; color: string; kind: string }[] } =
+      await res.json();
+    routeSrc.setData({
+      type: 'FeatureCollection',
+      features: data.segments.map((s) => ({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: s.coords },
+        properties: { color: s.color, kind: s.kind },
+      })),
+    });
+  } catch {
+    // 경로 실패는 시세 팝업 자체를 막을 이유가 없다 — 조용히 무시.
+  }
+}
+
+function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse', travel: TravelMode): string {
   const type = HOUSING_LABEL_SHORT[p.type as keyof typeof HOUSING_LABEL_SHORT] ?? String(p.type);
   const name = p.name ? esc(p.name) : `${esc(p.dong)} ${type}`;
   const deposit = formatManwon(p.deposit as number | null);
@@ -468,6 +592,7 @@ function popupHtml(p: Record<string, unknown>, mode: 'wolse' | 'jeonse'): string
         ${p.builtYear ? ` · ${esc(p.builtYear)}년` : ''}
       </div>
       ${warn}
+      ${routeButtonsHtml(travel)}
       ${linkButtons}
     </div>`;
 }

@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { RangeQuery, Router, StopsIndex, Timetable } from 'minotor';
+import { Query, RangeQuery, Router, StopsIndex, Timetable } from 'minotor';
+import type { Leg, VehicleLeg } from 'minotor';
 import { circle, featureCollection, union } from '@turf/turf';
 import type { Feature, Polygon } from 'geojson';
 import { assertKoreanCoord } from './security';
-import type { IsochronePolygon } from './routing';
+import { orsDirections } from './ors';
+import type { IsochronePolygon, RouteSegment } from './routing';
 
 /**
  * 대중교통 등시선 — minotor(RAPTOR) 를 서버리스 함수 안에서 직접 돌린다.
@@ -22,6 +24,49 @@ export interface TransitDeparture {
   dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   hour: number;
   minute: number;
+}
+
+export type TransitModeFilter = 'all' | 'subway' | 'bus';
+
+/**
+ * minotor 내부 RouteType 숫자값(`node_modules/minotor/dist/timetable/timetable.d.ts`
+ * 의 `RouteTypes`). 패키지가 이 상수 자체는 공개 export 하지 않아서 값만 옮겨왔다
+ * — GTFS 표준 route_type을 그대로 1:1 매핑한 값이라 바뀔 일은 거의 없다.
+ */
+const ROUTE_TYPE = {
+  TRAM: 1, SUBWAY: 2, RAIL: 3, BUS: 4, FERRY: 5,
+  CABLE_TRAM: 6, AERIAL_LIFT: 7, FUNICULAR: 8, TROLLEYBUS: 9, MONORAIL: 10,
+} as const;
+/** "버스" 취급: SUBWAY 를 뺀 전부. 이 GTFS는 route_type 표기가 표준과 어긋나서
+ * (실측: type=0,3 전부 시내버스 번호) SUBWAY 여부 하나로만 가른다 — TODO.md 참고. */
+const NON_SUBWAY_TYPES = Object.values(ROUTE_TYPE).filter((t) => t !== ROUTE_TYPE.SUBWAY);
+
+const SUBWAY_LINE_COLORS: Record<string, string> = {
+  '1호선': '#EF8B1E',
+  '2호선': '#7ABE23',
+  '3호선': '#93502E',
+  '4호선': '#00A4E4',
+};
+const SUBWAY_DEFAULT_COLOR = '#8B8B8B';
+const BUS_PALETTE = [
+  '#E63946', '#2A9D8F', '#F4A261', '#E76F51', '#457B9D', '#8AC926', '#FF6B9D', '#6A4C93',
+];
+
+function subwayColor(routeName: string): string {
+  for (const [key, color] of Object.entries(SUBWAY_LINE_COLORS)) {
+    if (routeName.includes(key)) return color;
+  }
+  return SUBWAY_DEFAULT_COLOR;
+}
+
+function busColor(routeName: string): string {
+  let hash = 0;
+  for (let i = 0; i < routeName.length; i++) hash = (hash * 31 + routeName.charCodeAt(i)) | 0;
+  return BUS_PALETTE[Math.abs(hash) % BUS_PALETTE.length]!;
+}
+
+function isVehicleLeg(leg: Leg): leg is VehicleLeg {
+  return 'route' in leg;
 }
 
 const WALK_SPEED_KMH = 4.8;
@@ -119,4 +164,89 @@ export async function transitIsochrone(
   return merged.geometry.type === 'Polygon'
     ? { type: 'MultiPolygon', coordinates: [merged.geometry.coordinates] }
     : { type: 'MultiPolygon', coordinates: merged.geometry.coordinates };
+}
+
+const WALK_SEGMENT_COLOR = '#94A3B8';
+
+/**
+ * 두 지점 사이의 최적 대중교통 경로 — 건물 상세 팝업의 "경로 보기"가 쓴다.
+ *
+ * `transitIsochrone()`(전체 도달 가능 정류장)과 달리 지점→지점 단일 경로라서
+ * minotor의 `Query`(RangeQuery 아님) + `Router.route()` 를 쓴다.
+ *
+ * 지하철 구간은 정류장 직선(철로 shapes.txt가 원본 GTFS에 없음), 버스 구간은
+ * ORS Directions로 실제 도로 위에 스냅한다 — 버스는 도로를 달리므로 이 근사가
+ * 훨씬 사실에 가깝다.
+ */
+export async function transitRoute(
+  fromLon: number,
+  fromLat: number,
+  toLon: number,
+  toLat: number,
+  departure: TransitDeparture,
+  modeFilter: TransitModeFilter,
+): Promise<RouteSegment[]> {
+  assertKoreanCoord(fromLon, fromLat);
+  assertKoreanCoord(toLon, toLat);
+  const { router, stopsIndex } = loadGraph();
+
+  const originStop = stopsIndex.findStopsByLocation(fromLat, fromLon, 1, ACCESS_SEARCH_RADIUS_KM)[0];
+  const destStop = stopsIndex.findStopsByLocation(toLat, toLon, 1, ACCESS_SEARCH_RADIUS_KM)[0];
+  if (
+    !originStop || !destStop ||
+    originStop.lat === undefined || originStop.lon === undefined ||
+    destStop.lat === undefined || destStop.lon === undefined
+  ) {
+    throw new Error('인근에 대중교통 정류장을 찾을 수 없습니다.');
+  }
+
+  const departureTime = departure.hour * 60 + departure.minute;
+  const builder = new Query.Builder()
+    .from(originStop.id)
+    .to(destStop.id)
+    .departureTime(departureTime)
+    .maxTransfers(MAX_TRANSFERS)
+    .minTransferTime(MIN_TRANSFER_TIME);
+
+  // minotor가 이 숫자 타입을 공개 export 하지 않아 캐스팅이 필요하다(ROUTE_TYPE 주석 참고).
+  if (modeFilter === 'subway') builder.transportModes(new Set([ROUTE_TYPE.SUBWAY]) as any);
+  else if (modeFilter === 'bus') builder.transportModes(new Set(NON_SUBWAY_TYPES) as any);
+
+  const result = router.route(builder.build());
+  const bestRoute = result.bestRoute();
+  if (!bestRoute) throw new Error('대중교통 경로를 찾을 수 없습니다.');
+
+  const segments: RouteSegment[] = [
+    { coords: [[fromLon, fromLat], [originStop.lon, originStop.lat]], color: WALK_SEGMENT_COLOR, kind: 'walk' },
+  ];
+
+  for (const leg of bestRoute.legs) {
+    const from = leg.from;
+    const to = leg.to;
+    if (from.lat === undefined || from.lon === undefined || to.lat === undefined || to.lon === undefined) continue;
+
+    if (isVehicleLeg(leg)) {
+      if (leg.route.type === 'SUBWAY') {
+        segments.push({
+          coords: [[from.lon, from.lat], [to.lon, to.lat]],
+          color: subwayColor(leg.route.name),
+          kind: 'subway',
+          label: leg.route.name,
+        });
+      } else {
+        const coords = await orsDirections(from.lon, from.lat, to.lon, to.lat, 'driving-car');
+        segments.push({ coords, color: busColor(leg.route.name), kind: 'bus', label: leg.route.name });
+      }
+    } else {
+      segments.push({ coords: [[from.lon, from.lat], [to.lon, to.lat]], color: WALK_SEGMENT_COLOR, kind: 'transfer' });
+    }
+  }
+
+  segments.push({
+    coords: [[destStop.lon, destStop.lat], [toLon, toLat]],
+    color: WALK_SEGMENT_COLOR,
+    kind: 'walk',
+  });
+
+  return segments;
 }

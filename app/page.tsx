@@ -337,6 +337,8 @@ export default function Page() {
           intersection={data?.intersection ?? null}
           buildings={buildings}
           mode={filters.mode}
+          travel={filters.travel}
+          departure={{ dayOfWeek: filters.depDay, hour: filters.depHour, minute: filters.depMinute }}
         />
 
         {!origin && (
