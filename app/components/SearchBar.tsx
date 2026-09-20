@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { GeocodeResponse } from '../lib/types';
+import type { GeocodeResponse, PlaceCandidate } from '../lib/types';
 
 interface Props {
   onResolved: (r: { lon: number; lat: number; address: string | null }) => void;
@@ -17,12 +17,17 @@ interface Props {
  * 회사명으로도 검색된다. 좌표 해결 엔진의 키워드 검색 경로가 '카카오 판교' 같은
  * 상호를 건물 단위로 잡아내기 때문이다. 사용자가 정확한 주소를 몰라도 된다.
  *
+ * 검색 결과가 여러 개면(동명 상호가 흔함) 목록으로 보여주고 직접 고르게 한다 —
+ * 첫 번째 결과를 무조건 쓰면 서비스 커버리지(부산+인근) 밖의 동명 기업이
+ * 잘못 잡힐 수 있다(서버가 이미 이 지역으로 후보를 우선 제한한다).
+ *
  * Kakao REST 키는 서버 라우트에만 있다. 이 컴포넌트는 /api/geocode 만 호출한다.
  */
 export default function SearchBar({ onResolved, disabled, id = 'workplace', label = '직장 위치' }: Props) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<PlaceCandidate[] | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +36,7 @@ export default function SearchBar({ onResolved, disabled, id = 'workplace', labe
 
     setBusy(true);
     setError(null);
+    setCandidates(null);
     try {
       const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
       if (res.status === 429) {
@@ -42,16 +48,26 @@ export default function SearchBar({ onResolved, disabled, id = 'workplace', labe
         return;
       }
       const data: GeocodeResponse = await res.json();
-      if (!data.found || data.lon === undefined || data.lat === undefined) {
+      if (data.candidates.length === 0) {
         setError('찾을 수 없습니다. 회사명이나 도로명 주소로 다시 시도해 보세요.');
         return;
       }
-      onResolved({ lon: data.lon, lat: data.lat, address: data.address ?? null });
+      if (data.candidates.length === 1) {
+        select(data.candidates[0]!);
+        return;
+      }
+      setCandidates(data.candidates);
     } catch {
       setError('네트워크 오류입니다.');
     } finally {
       setBusy(false);
     }
+  }
+
+  function select(c: PlaceCandidate) {
+    setCandidates(null);
+    setQ(c.name);
+    onResolved({ lon: c.lon, lat: c.lat, address: c.address });
   }
 
   return (
@@ -64,7 +80,10 @@ export default function SearchBar({ onResolved, disabled, id = 'workplace', labe
           id={id}
           type="search"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setCandidates(null);
+          }}
           disabled={disabled || busy}
           placeholder="회사명 또는 주소"
           autoComplete="off"
@@ -83,6 +102,23 @@ export default function SearchBar({ onResolved, disabled, id = 'workplace', labe
         예: 카카오 판교, 삼성전자 수원, 서울 강남구 테헤란로 152
       </p>
       {error && <p className="mt-2 text-[12px] text-red-400">{error}</p>}
+
+      {candidates && candidates.length > 1 && (
+        <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-neutral-800 bg-neutral-900/90 text-[13px]">
+          {candidates.map((c, i) => (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => select(c)}
+                className="block w-full px-3 py-2 text-left transition hover:bg-cyan-400/10"
+              >
+                <div className="font-medium text-neutral-100">{c.name}</div>
+                {c.address && <div className="text-[11px] text-neutral-400">{c.address}</div>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </form>
   );
 }

@@ -176,6 +176,60 @@ async function kakaoAddress(q: string): Promise<GeoResult | null> {
   };
 }
 
+/**
+ * 부산+인근 통근권 bbox. 대중교통 커버리지(TODO.md 4번)와 동일한 범위다.
+ *
+ * 검색 후보를 이 범위로 제한하는 이유: "동우기업"처럼 흔한 상호는 전국에
+ * 여러 곳이 있다. 지금 서비스가 이 지역만 커버하는데 서울의 동명 기업이
+ * 먼저 뜨면 사용자가 엉뚱한 곳을 고르게 된다.
+ */
+const SERVICE_BBOX = { minLon: 128.35, minLat: 34.8, maxLon: 129.35, maxLat: 35.65 };
+
+export interface PlaceCandidate {
+  name: string;
+  address: string | null;
+  lon: number;
+  lat: number;
+  sido: string | null;
+  sigungu: string | null;
+}
+
+/**
+ * 상호/주소로 후보 목록을 찾는다. `geocode()`(단일 결과, 캐시)와 달리 사용자가
+ * 직접 고르게 하는 자동완성용이라 캐시하지 않는다 — 글자 하나 다를 때마다
+ * 캐시 키가 갈려서 적중률이 낮고, DB에 검색어 조각을 남기는 것도 원치 않는다.
+ */
+export async function searchPlaces(rawQuery: string): Promise<PlaceCandidate[]> {
+  const q = clean(rawQuery, 100);
+  if (!q || !env.kakaoRestKey) return [];
+
+  const rect = `${SERVICE_BBOX.minLon},${SERVICE_BBOX.minLat},${SERVICE_BBOX.maxLon},${SERVICE_BBOX.maxLat}`;
+  const json = await kakaoFetch('/v2/local/search/keyword.json', { query: q, size: '10', rect });
+  const docs: any[] = json?.documents ?? [];
+
+  return docs
+    .map((doc): PlaceCandidate | null => {
+      const lon = Number(doc.x);
+      const lat = Number(doc.y);
+      try {
+        assertKoreanCoord(lon, lat);
+      } catch {
+        return null;
+      }
+      const addr = clean(doc.road_address_name ?? doc.address_name);
+      const parts = (addr ?? '').split(' ');
+      return {
+        name: clean(doc.place_name) ?? q,
+        address: addr,
+        lon,
+        lat,
+        sido: parts[0] ?? null,
+        sigungu: parts[1] ?? null,
+      };
+    })
+    .filter((c): c is PlaceCandidate => c !== null);
+}
+
 async function kakaoKeyword(q: string): Promise<GeoResult | null> {
   const json = await kakaoFetch('/v2/local/search/keyword.json', { query: q, size: '1' });
   const doc = json?.documents?.[0];

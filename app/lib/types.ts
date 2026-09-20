@@ -85,14 +85,17 @@ export const TRAVEL_LABEL: Record<TravelMode, string> = {
 /** 허용 통근 시간. 서버의 assertAllowedMinutes 와 일치해야 한다. */
 export const MINUTE_OPTIONS = [10, 15, 20, 30, 45, 60, 90] as const;
 
+export interface PlaceCandidate {
+  name: string;
+  address: string | null;
+  lon: number;
+  lat: number;
+  sido: string | null;
+  sigungu: string | null;
+}
+
 export interface GeocodeResponse {
-  found: boolean;
-  lon?: number;
-  lat?: number;
-  address?: string | null;
-  sido?: string | null;
-  sigungu?: string | null;
-  precision?: string;
+  candidates: PlaceCandidate[];
 }
 
 export interface Filters {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { geocode } from '../../../src/lib/geocode';
+import { geocode, searchPlaces } from '../../../src/lib/geocode';
 import { clientKey, rateLimit } from '../../../src/lib/rate-limit';
 import { clean } from '../../../src/lib/text';
 
@@ -34,20 +34,25 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   try {
+    // 부산+인근 통근권 bbox로 제한한 후보 목록을 먼저 찾는다 — "동우기업"처럼
+    // 흔한 상호가 서비스 커버리지 밖(예: 서울)에서 먼저 잡히는 것을 막는다.
+    const candidates = await searchPlaces(q);
+    if (candidates.length > 0) {
+      return NextResponse.json({ candidates }, { headers: noStore() });
+    }
+
+    // bbox 안에 후보가 없으면 전국 단위 단일 결과로 물러선다(정확한 주소를
+    // 직접 입력한 경우 등). 도보/자차(ORS)는 전국 커버라 완전히 무의미하지 않다.
     const hit = await geocode(q);
     if (!hit) {
-      return NextResponse.json({ found: false }, { headers: noStore() });
+      return NextResponse.json({ candidates: [] }, { headers: noStore() });
     }
 
     return NextResponse.json(
       {
-        found: true,
-        lon: hit.lon,
-        lat: hit.lat,
-        address: hit.address,
-        sido: hit.sido,
-        sigungu: hit.sigungu,
-        precision: hit.precision,
+        candidates: [
+          { name: q, address: hit.address, lon: hit.lon, lat: hit.lat, sido: hit.sido, sigungu: hit.sigungu },
+        ],
       },
       { headers: noStore() },
     );
