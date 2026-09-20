@@ -28,6 +28,5 @@ secrets/
 next-env.d.ts
 *.tsbuildinfo
 
-
 .vercel
 .env*
