@@ -223,18 +223,50 @@ export default function RentMap({
         },
       });
 
+      // 직장 위치가 건물 시세 점들 사이에서 안 묻히게 — halo(바깥 번짐) +
+      // 확대된 마커 + 텍스트 라벨 3중으로 강조한다. 건물 점(buildings-reliable)도
+      // 최저가 구간이 비슷한 시안 계열이라 마커 색만으로는 눈에 안 띈다는
+      // 피드백을 받아 크기·halo·라벨까지 더했다.
+      map.addLayer({
+        id: 'origin-halo',
+        type: 'circle',
+        source: ORIGIN_SOURCE,
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 20,
+          'circle-color': ['match', ['get', 'role'], 'origin-b', '#e879f9', '#22d3ee'],
+          'circle-opacity': 0.25,
+        },
+      });
       map.addLayer({
         id: 'origin-marker',
         type: 'circle',
         source: ORIGIN_SOURCE,
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
-          'circle-radius': 8,
+          'circle-radius': 11,
           // 2인 모드에서 두 사람을 색으로 구분한다 — A(본인)는 기존 시안,
           // B(같이 살 사람)는 마젠타 계열로 지도 전체 팔레트와 안 겹치게.
           'circle-color': ['match', ['get', 'role'], 'origin-b', '#e879f9', '#22d3ee'],
           'circle-stroke-width': 3,
-          'circle-stroke-color': ['match', ['get', 'role'], 'origin-b', '#4a044e', '#083344'],
+          'circle-stroke-color': '#f8fafc',
+        },
+      });
+      map.addLayer({
+        id: 'origin-label',
+        type: 'symbol',
+        source: ORIGIN_SOURCE,
+        filter: ['==', ['geometry-type'], 'Point'],
+        layout: {
+          'text-field': ['match', ['get', 'role'], 'origin-b', '동거인 직장', '내 직장'],
+          'text-size': 12,
+          'text-offset': [0, -1.8],
+          'text-anchor': 'bottom',
+        },
+        paint: {
+          'text-color': ['match', ['get', 'role'], 'origin-b', '#f5d0fe', '#a5f3fc'],
+          'text-halo-color': '#0b1120',
+          'text-halo-width': 1.5,
         },
       });
 
