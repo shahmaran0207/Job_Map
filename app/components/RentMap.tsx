@@ -384,6 +384,18 @@ export default function RentMap({
     else map.once('load', apply);
   }, [buildings, origin, origin2, area, area2, intersection, mode]);
 
+  // 검색 즉시 직장 위치로 이동한다. 등시선(area)은 서버 왕복이 있어 몇 초
+  // 걸리거나 실패할 수 있는데, 그때까지 지도가 안 움직이면 "검색이 안 먹혔다"
+  // 로 보인다 — 그래서 origin 이 바뀌는 순간 먼저 날아가고, 아래 두 번째
+  // 효과가 통근권 도착 후 화면을 그 영역에 맞게 다시 조정한다.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !origin) return;
+    const fly = () => map.flyTo({ center: [origin.lon, origin.lat], zoom: Math.max(map.getZoom(), 12), duration: 800 });
+    if (readyRef.current) fly();
+    else map.once('load', fly);
+  }, [origin]);
+
   // 통근권이 바뀌면 그 영역이 화면에 들어오게 한다. 2인 모드면 두 사람의
   // 통근권을 합친 범위로 맞춰서 교집합이 한쪽에 치우쳐 있어도 둘 다 보인다.
   useEffect(() => {
